@@ -46,3 +46,80 @@ export function formatPhoneForDisplay(raw: string | null | undefined): string {
   }
   return raw.trim();
 }
+
+/**
+ * The mobile codes a student or staff member can pick: India and the Gulf,
+ * where many of our students live. Same list as the marketing apply form.
+ */
+export const MOBILE_COUNTRIES = [
+  { code: 'IN', name: 'India', prefix: '+91', length: 10, pattern: /^[6-9]\d{9}$/ },
+  { code: 'AE', name: 'United Arab Emirates', prefix: '+971', length: 9, pattern: /^\d{9}$/ },
+  { code: 'SA', name: 'Saudi Arabia', prefix: '+966', length: 9, pattern: /^\d{9}$/ },
+  { code: 'QA', name: 'Qatar', prefix: '+974', length: 8, pattern: /^\d{8}$/ },
+  { code: 'OM', name: 'Oman', prefix: '+968', length: 8, pattern: /^\d{8}$/ },
+  { code: 'KW', name: 'Kuwait', prefix: '+965', length: 8, pattern: /^\d{8}$/ },
+  { code: 'BH', name: 'Bahrain', prefix: '+973', length: 8, pattern: /^\d{8}$/ },
+] as const;
+
+export type MobileCountry = (typeof MOBILE_COUNTRIES)[number];
+
+/** The country for a code, India when unknown. */
+export function mobileCountry(code: string | null | undefined): MobileCountry {
+  return MOBILE_COUNTRIES.find((c) => c.code === code) || MOBILE_COUNTRIES[0];
+}
+
+/** A number with its code: the listed country it belongs to and its national digits, or null. */
+function splitListedMobile(digitsWithCode: string): { country: MobileCountry; national: string } | null {
+  // Longest code first, so +971 is never read as +97 or +9.
+  const byPrefix = [...MOBILE_COUNTRIES].sort((a, b) => b.prefix.length - a.prefix.length);
+  for (const country of byPrefix) {
+    const code = country.prefix.slice(1);
+    if (!digitsWithCode.startsWith(code)) continue;
+    const national = digitsWithCode.slice(code.length);
+    if (country.pattern.test(national)) return { country, national };
+  }
+  return null;
+}
+
+/**
+ * A student's mobile as demo and lead rows store it: an Indian number as its
+ * ten digits (what every older row and staff tool expects), a Gulf number as
+ * E.164 with its code. Null when it is not a mobile from MOBILE_COUNTRIES.
+ *
+ * A "+" number is read by its code first. Reading the last ten digits alone
+ * took a Saudi "+966 5x xxx xxxx" for an Indian "65xxxxxxxx".
+ */
+export function storedMobile(raw: string | null | undefined): string | null {
+  const trimmed = (raw || '').trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return null;
+  if (trimmed.startsWith('+')) {
+    const listed = splitListedMobile(digits);
+    if (!listed) return null;
+    return listed.country.code === 'IN' ? listed.national : `${listed.country.prefix}${listed.national}`;
+  }
+  if (digits.length === 10) return /^[6-9]\d{9}$/.test(digits) ? digits : null;
+  // A code written without the "+": 91, 971, 966 and so on.
+  const listed = splitListedMobile(digits);
+  if (listed) return listed.country.code === 'IN' ? listed.national : `${listed.country.prefix}${listed.national}`;
+  // Older spellings of an Indian number, such as a leading 0.
+  const ten = digits.slice(-10);
+  return /^[6-9]\d{9}$/.test(ten) ? ten : null;
+}
+
+/** A stored mobile split for a code picker: the country and the national digits. Unknown reads as India. */
+export function mobileParts(stored: string | null | undefined): { country: MobileCountry; national: string } {
+  const trimmed = (stored || '').trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (trimmed.startsWith('+')) {
+    const listed = splitListedMobile(digits);
+    if (listed) return listed;
+  }
+  return { country: MOBILE_COUNTRIES[0], national: digits.slice(-10) };
+}
+
+/** A stored mobile with its code and no spaces, "+971551993240", for tel: and wa.me links. */
+export function mobileE164(stored: string | null | undefined): string {
+  const { country, national } = mobileParts(stored);
+  return national ? `${country.prefix}${national}` : '';
+}

@@ -47,43 +47,6 @@ export async function GET(request: NextRequest) {
       batchName = batch?.name || null;
     }
 
-    // Get onboarding steps
-    const { data: onboardingSteps } = await supabase
-      .from('student_onboarding_progress')
-      .select(`
-        id,
-        is_completed,
-        completed_at,
-        completed_by_type,
-        step_definition:onboarding_step_definitions (
-          step_key,
-          title,
-          description,
-          icon_name,
-          action_type,
-          action_config,
-          display_order,
-          is_required
-        )
-      `)
-      .eq('user_id', auth.userId)
-      .order('created_at', { ascending: true });
-
-    const steps = (onboardingSteps || []).map((s: any) => ({
-      id: s.id,
-      isCompleted: s.is_completed,
-      completedAt: s.completed_at,
-      completedByType: s.completed_by_type,
-      stepKey: s.step_definition?.step_key,
-      title: s.step_definition?.title,
-      description: s.step_definition?.description,
-      iconName: s.step_definition?.icon_name,
-      actionType: s.step_definition?.action_type,
-      actionConfig: s.step_definition?.action_config || {},
-      displayOrder: s.step_definition?.display_order,
-      isRequired: s.step_definition?.is_required,
-    }));
-
     return NextResponse.json({
       success: true,
       data: {
@@ -96,7 +59,6 @@ export async function GET(request: NextRequest) {
         feePaid: studentProfile.fee_paid,
         feeDue: studentProfile.fee_due,
         leadProfile: leadProfile || null,
-        onboardingSteps: steps,
       },
     });
   } catch (error: any) {

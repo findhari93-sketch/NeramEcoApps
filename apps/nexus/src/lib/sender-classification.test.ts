@@ -71,6 +71,8 @@ const ASSISTANT: Record<string, string> = {
     'Second installment due in 3 days, or today. A daily sweep.',
   'apps/nexus/src/app/api/cron/demo-staff-reminders/route.ts':
     "audience: 'staff'. Demo requests and demo-day reminders to the demo team, queued by the system.",
+  'apps/nexus/src/app/api/cron/demo-today-digest/route.ts':
+    "audience: 'staff'. Each tutor's \"you have N demos today\" at 08:00, a daily sweep.",
 };
 
 /**

@@ -33,12 +33,14 @@ import { NO_SHOW_AFTER_END_MIN } from '@/lib/demo/demo-verdict';
 import type { DemoScheduleSettings, DemoHost } from './types';
 import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage, type ProfileFee } from './journey';
 import { ago, classLabel, isCallbackDue, isOverdueNew, telHref, waHref, whenLabel } from './format';
+import { formatLaterDate } from '@/lib/demo/try-later';
 
 const HEAD: Record<DeskStage, [string, string]> = {
   to_call: ['Asked for', 'Call back'],
   scheduled: ['Demo', 'Meeting'],
   after_demo: ['Demo', 'Next follow-up'],
   joined: ['Demo', 'Enrolled'],
+  later: ['Why later', 'Try again'],
   closed: ['Last request', 'Why closed'],
 };
 
@@ -186,8 +188,18 @@ export default function RequestList({
                 </TableCell>
 
                 <TableCell sx={{ minWidth: 180 }}>
-                  <Typography variant="body2">{when.primary}</Typography>
-                  {stage === 'to_call' || stage === 'closed' ? (
+                  {stage === 'later' ? (
+                    <Typography variant="body2" sx={{ whiteSpace: 'normal', maxWidth: 280 }}>
+                      {r.later_reason || 'Asked us to wait'}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2">{when.primary}</Typography>
+                  )}
+                  {stage === 'later' ? null : stage === 'to_call' && r.last_call_outcome === 'later' ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'normal', maxWidth: 280 }}>
+                      Asked to wait{r.later_reason ? `: ${r.later_reason}` : ''}
+                    </Typography>
+                  ) : stage === 'to_call' || stage === 'closed' ? (
                     when.secondary && (
                       <Typography variant="caption" color="text.secondary">
                         {when.secondary}
@@ -261,6 +273,13 @@ export default function RequestList({
                           {feeLineShort(e.fee)}
                         </Typography>
                       )}
+                    </Box>
+                  )}
+
+                  {stage === 'later' && r.next_contact_at && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <ScheduleIcon aria-hidden sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      <Typography variant="body2">{formatLaterDate(r.next_contact_at)}</Typography>
                     </Box>
                   )}
 

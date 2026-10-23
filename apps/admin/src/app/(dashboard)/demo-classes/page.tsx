@@ -24,11 +24,17 @@ const EMPTY: Record<DeskStage, { title: string; body: string }> = {
   scheduled: { title: 'No demos scheduled', body: 'Confirm a request, or use Add demo > Demo planned for one fixed on WhatsApp.' },
   after_demo: { title: 'No follow-ups running', body: 'After a demo, students stay here until they join or say no.' },
   joined: { title: 'Nobody has enrolled after a demo yet', body: 'Students show here once their fee is recorded or their payment is verified.' },
-  closed: { title: 'Nothing closed', body: 'Not interested, cancelled and stopped follow-ups are kept here with the reason.' },
+  later: { title: 'Nobody waiting for later', body: 'When a family asks you to check back, use Try later. They wait here and come back to To call on that date.' },
+  closed: { title: 'Nothing closed', body: 'Not interested, joined another class, cancelled and stopped follow-ups are kept here with the reason.' },
 };
 
-function stageOfRequest(r: DemoRequest, followUp: DemoFollowUpRow | null | undefined, enrolment: Record<string, DemoEnrolment>): DeskStage {
-  return stageOf(r, followUp, enrolment[r.id]);
+function stageOfRequest(
+  r: DemoRequest,
+  followUp: DemoFollowUpRow | null | undefined,
+  enrolment: Record<string, DemoEnrolment>,
+  now: Date,
+): DeskStage {
+  return stageOf(r, followUp, enrolment[r.id], now);
 }
 
 function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
@@ -112,8 +118,8 @@ function DemoDesk() {
 
   const people = useMemo(() => (list ? groupByPerson(list.requests) : []), [list]);
   const stageOfPerson = useCallback(
-    (p: DeskPerson): DeskStage => stageOfRequest(p.current, list?.followUps?.[p.current.id], list?.enrolment ?? {}),
-    [list],
+    (p: DeskPerson): DeskStage => stageOfRequest(p.current, list?.followUps?.[p.current.id], list?.enrolment ?? {}, now),
+    [list, now],
   );
   const personOf = useCallback(
     (id: string | null) => (id ? people.find((p) => p.current.id === id || p.history.some((h) => h.id === id)) ?? null : null),
@@ -124,7 +130,7 @@ function DemoDesk() {
   useEffect(() => {
     if (!detail || detail.request.id !== selectedId) return;
     const p = personOf(selectedId);
-    setTab(p ? stageOfPerson(p) : stageOfRequest(detail.request, detail.lastFollowUp, list?.enrolment ?? {}));
+    setTab(p ? stageOfPerson(p) : stageOfRequest(detail.request, detail.lastFollowUp, list?.enrolment ?? {}, now));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.request.id]);
 
@@ -145,7 +151,7 @@ function DemoDesk() {
       if (!res.ok) return d.error || 'Something went wrong';
       setDetail(d);
       // Follow the student to their new tab (confirmed, held, attended, stopped), so the panel stays in view.
-      setTab(stageOfRequest(d.request, d.lastFollowUp, list?.enrolment ?? {}));
+      setTab(stageOfRequest(d.request, d.lastFollowUp, list?.enrolment ?? {}, new Date()));
       setList((prev) =>
         prev ? { ...prev, requests: prev.requests.map((r) => (r.id === d.request.id ? d.request : r)) } : prev,
       );
@@ -157,7 +163,7 @@ function DemoDesk() {
   };
 
   const counts = useMemo(() => {
-    const c: Record<DeskStage, number> = { to_call: 0, scheduled: 0, after_demo: 0, joined: 0, closed: 0 };
+    const c: Record<DeskStage, number> = { to_call: 0, scheduled: 0, after_demo: 0, joined: 0, later: 0, closed: 0 };
     people.forEach((p) => c[stageOfPerson(p)]++);
     return c;
   }, [people, stageOfPerson]);

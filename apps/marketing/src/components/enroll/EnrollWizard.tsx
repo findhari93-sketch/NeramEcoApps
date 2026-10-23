@@ -42,6 +42,8 @@ import { rupees, istTodayKey, addDays, type StudentPayLinkData, type PaymentSubm
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
 import { useEnrollmentDraftSync } from '@/hooks/useEnrollmentDraftSync';
 import { planResume, resumeMessage, type ServerResume } from './resume';
+import { splitEnrolPhone, joinEnrolPhone } from './enrolPhone';
+import { getCountryConfig } from '@/components/apply/countryConfig';
 import type {
   PersonalInfoData,
   LocationData,
@@ -425,8 +427,30 @@ export default function EnrollWizard() {
     }
   }, [user, tokenStatus, usedLinkData]);
 
+  // The number the account already proved by OTP beats one carried in by the
+  // link or an older save. Without this a link made with a wrong number kept
+  // putting that number back after every resume, so a student whose own number
+  // was verified still read "Phone verification is required". Once per visit,
+  // after the resume, so a number the student then types is left alone.
+  const accountPhoneApplied = useRef(false);
+  useEffect(() => {
+    if (!resumeChecked || accountPhoneApplied.current || !user?.phoneVerified || !user.phone) return;
+    accountPhoneApplied.current = true;
+    const own = user.phone.startsWith('+') ? user.phone : `+91${user.phone}`;
+    setVerifiedPhone(own);
+    setPhoneVerified(true);
+    setPhoneVerifiedAt((at) => at || new Date().toISOString());
+    if (formDataRef.current.personal.phone === own) return;
+    setFormData((prev) => ({
+      ...prev,
+      personal: { ...prev.personal, phone: own, phoneCountry: splitEnrolPhone(own, 'IN').phoneCountry },
+    }));
+  }, [resumeChecked, user]);
+
   // Derive whether phone is currently verified (resets when user edits number)
   const isPhoneCurrentlyVerified = phoneVerified && !!verifiedPhone && verifiedPhone === formData.personal.phone;
+  // The number and code the Verify dialog opens on.
+  const verifyPhoneParts = splitEnrolPhone(formData.personal.phone || linkData?.studentPhone || '', formData.personal.phoneCountry);
 
   const validateToken = async (t: string, firebaseUserOverride?: any) => {
     try {
@@ -1306,7 +1330,10 @@ export default function EnrollWizard() {
             onClose={() => setShowSignIn(false)}
             phoneOnly
             apiBaseUrl={APP_URL}
-            initialPhone={(linkData.studentPhone || '').replace(/\D/g, '').slice(-10)}
+            // The demo's number on its own code: a Gulf demo signs in on +971, +966 and so on.
+            dialCode={getCountryConfig(splitEnrolPhone(linkData.studentPhone, 'IN').phoneCountry).phonePrefix}
+            phoneLength={getCountryConfig(splitEnrolPhone(linkData.studentPhone, 'IN').phoneCountry).phoneLength}
+            initialPhone={splitEnrolPhone(linkData.studentPhone, 'IN').phone}
             onAuthenticated={() => setShowSignIn(false)}
           />
         )}
@@ -1727,17 +1754,22 @@ export default function EnrollWizard() {
           onClose={() => setShowPhoneModal(false)}
           phoneOnly
           apiBaseUrl={APP_URL}
-          initialPhone={(formData.personal.phone || linkData?.studentPhone || '').replace(/^\+91/, '')}
-          onAuthenticated={(verifiedPhoneNumber) => {
+          // The code picked beside the field (India or Gulf); the dialog sends the OTP to that country.
+          dialCode={getCountryConfig(verifyPhoneParts.phoneCountry).phonePrefix}
+          phoneLength={getCountryConfig(verifyPhoneParts.phoneCountry).phoneLength}
+          initialPhone={verifyPhoneParts.phone}
+          onAuthenticated={(verifiedPhoneNumber, fullFromDialog) => {
             setPhoneVerified(true);
             setPhoneVerifiedAt(new Date().toISOString());
             setShowPhoneModal(false);
             if (verifiedPhoneNumber) {
-              const fullPhone = verifiedPhoneNumber.startsWith('+') ? verifiedPhoneNumber : `+91${verifiedPhoneNumber}`;
+              // The dialog's full number wins: the student may have picked another country there.
+              const fullPhone = fullFromDialog
+                || (verifiedPhoneNumber.startsWith('+') ? verifiedPhoneNumber : joinEnrolPhone(verifiedPhoneNumber, verifyPhoneParts.phoneCountry));
               setVerifiedPhone(fullPhone);
               setFormData(prev => ({
                 ...prev,
-                personal: { ...prev.personal, phone: fullPhone },
+                personal: { ...prev.personal, phone: fullPhone, phoneCountry: splitEnrolPhone(fullPhone, verifyPhoneParts.phoneCountry).phoneCountry },
               }));
             }
           }}

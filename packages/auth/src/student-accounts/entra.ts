@@ -220,6 +220,27 @@ export async function setOtherMails(userId: string, emails: string[]): Promise<G
   }
 }
 
+/** The name Teams shows: first and last name. A missing surname is cleared, never invented. */
+export async function setEntraName(
+  userId: string,
+  name: { givenName: string; surname: string | null },
+): Promise<GraphResult<void>> {
+  try {
+    const res = await graph(`/users/${encodeURIComponent(userId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        displayName: [name.givenName, name.surname].filter(Boolean).join(' '),
+        givenName: name.givenName,
+        surname: name.surname || null,
+      }),
+    });
+    if (res.ok) return { ok: true, value: undefined };
+    return failed(res, 'User.ReadWrite.All');
+  } catch (err) {
+    return thrown(err);
+  }
+}
+
 export async function resetEntraPassword(userId: string, password: string): Promise<GraphResult<void>> {
   try {
     const res = await graph(`/users/${encodeURIComponent(userId)}`, {

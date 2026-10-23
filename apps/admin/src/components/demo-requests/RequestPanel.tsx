@@ -7,6 +7,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -39,6 +40,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import SchoolIcon from '@mui/icons-material/School';
 import EditIcon from '@mui/icons-material/Edit';
+import SnoozeIcon from '@mui/icons-material/Snooze';
 import {
   DEMO_STATUS_LABELS,
   formatDemoDateTime,
@@ -66,6 +68,9 @@ import { meetingKindOf } from '@/lib/demo/meeting';
 import { closedReason, linkIsReallyPaid, linkIsUnfinalisedRecorded } from './journey';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import TeamsEvidence from './TeamsEvidence';
+import TryLaterDialog from './TryLaterDialog';
+import { formatLaterDate, laterEmailRecipient, laterFamilyMessage } from '@/lib/demo/try-later';
+import { marketingOriginFor } from '@/lib/marketing-links';
 import { guestsWhoJoined, hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
@@ -106,14 +111,22 @@ const MESSAGE_LABEL: Record<string, string> = {
   missed: 'Missed you',
 };
 
+type Outcome = 'interested' | 'no_answer' | 'call_back' | 'joined_elsewhere' | 'not_interested';
+
 const OUTCOME_LABEL: Record<string, string> = {
   interested: 'Interested',
   no_answer: 'No answer',
   call_back: 'Call back later',
+  joined_elsewhere: 'Joined another class',
   not_interested: 'Not interested',
+  later: 'Asked to try later',
 };
 
-type Outcome = 'interested' | 'no_answer' | 'call_back' | 'not_interested';
+/** What a call can end in. "Try later" has its own button and date picker. */
+const CALL_OUTCOMES: Outcome[] = ['interested', 'no_answer', 'call_back', 'joined_elsewhere', 'not_interested'];
+
+/** Outcomes that close the request, so a reason is required. */
+const CLOSING: Outcome[] = ['joined_elsewhere', 'not_interested'];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -232,6 +245,9 @@ export default function RequestPanel({
   const [schedule, setSchedule] = useState<'confirm' | 'reschedule' | null>(openConfirm ? 'confirm' : null);
   const [reasonFor, setReasonFor] = useState<'cancel' | null>(null);
   const [reason, setReason] = useState('');
+  const [joinedElsewhere, setJoinedElsewhere] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
+  const [copiedLater, setCopiedLater] = useState(false);
   const [copied, setCopied] = useState(false);
   const [attendedOpen, setAttendedOpen] = useState(false);
   // Opened to correct an automatic No-show: mark Attended rather than only start a follow-up.
@@ -376,6 +392,22 @@ export default function RequestPanel({
   };
 
   const active = ['pending', 'contacted', 'approved'].includes(r.status);
+  // A confirmed demo whose time is over still needs someone to say what happened.
+  const demoTimeOver = r.status === 'approved' && !!start && now.getTime() > start.getTime() + r.scheduled_minutes * 60_000;
+  const laterEmail = laterEmailRecipient(r);
+  const laterMessage = laterFamilyMessage(
+    r,
+    marketingOriginFor(typeof window !== 'undefined' ? window.location.origin : null, process.env.NEXT_PUBLIC_MARKETING_URL),
+  );
+  const copyLaterMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(laterMessage);
+      setCopiedLater(true);
+      setTimeout(() => setCopiedLater(false), 1500);
+    } catch {
+      // Clipboard blocked.
+    }
+  };
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 2 }} aria-label={`Demo request ${r.ref_code}`}>
@@ -565,6 +597,9 @@ export default function RequestPanel({
                   {busy === 'resend' ? 'Sending' : 'Resend WhatsApp'}
                 </Button>
               )}
+              <Button startIcon={<SnoozeIcon />} onClick={() => setLaterOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+                Try later
+              </Button>
               <Button color="error" onClick={() => setReasonFor('cancel')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Cancel demo
               </Button>
@@ -583,6 +618,11 @@ export default function RequestPanel({
                 onDismissNotice={() => setPaymentNote(null)}
               />
             </Box>
+          )}
+          {demoTimeOver && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              The demo time has passed. Mark what happened: Attended, No-show or Held at another time. If they asked to wait, use Try later.
+            </Alert>
           )}
           {r.status === 'approved' && (
             <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -662,7 +702,44 @@ export default function RequestPanel({
           <Typography variant="body2" sx={{ mt: 1.5 }}>
             Asked for: <b>{formatDemoPreference(r.preferred_date, r.preferred_window, settings.schedule)}</b>
           </Typography>
-          {r.last_call_outcome && (
+          {r.last_call_outcome === 'later' && r.next_contact_at && (
+            <Alert
+              severity={new Date(r.next_contact_at).getTime() > now.getTime() ? 'info' : 'warning'}
+              icon={<SnoozeIcon />}
+              sx={{ mt: 1.5 }}
+            >
+              <Typography variant="body2" fontWeight={700}>
+                {new Date(r.next_contact_at).getTime() > now.getTime()
+                  ? `Asked us to wait. Try again on ${formatLaterDate(r.next_contact_at)}.`
+                  : `Try-again date reached (${formatLaterDate(r.next_contact_at)}). Call them now.`}
+              </Typography>
+              {r.later_reason && <Typography variant="body2">{r.later_reason}</Typography>}
+              <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+                {!laterEmail
+                  ? 'No email on file. Send the message below on WhatsApp.'
+                  : r.later_nudged_at
+                    ? `The family email to ${laterEmail} has gone out. See the activity log.`
+                    : `The family gets one email at ${laterEmail} on that day.`}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button size="small" startIcon={<ContentCopyIcon />} onClick={copyLaterMessage} sx={{ minHeight: 40 }}>
+                  {copiedLater ? 'Copied' : 'Copy message'}
+                </Button>
+                <Button
+                  size="small"
+                  color="success"
+                  startIcon={<WhatsAppIcon />}
+                  href={waHref(r.phone, laterMessage)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ minHeight: 40 }}
+                >
+                  Send on WhatsApp
+                </Button>
+              </Box>
+            </Alert>
+          )}
+          {r.last_call_outcome && r.last_call_outcome !== 'later' && (
             <Typography variant="body2" color="text.secondary">
               Last call: {OUTCOME_LABEL[r.last_call_outcome]}
               {r.next_contact_at
@@ -679,7 +756,7 @@ export default function RequestPanel({
             aria-label="Call outcome"
             sx={{ flexWrap: 'wrap', gap: 1, '& .MuiToggleButton-root': { minHeight: 44, border: 1, borderColor: 'divider', borderRadius: '8px !important', textTransform: 'none' } }}
           >
-            {(Object.keys(OUTCOME_LABEL) as Outcome[]).map((o) => (
+            {CALL_OUTCOMES.map((o) => (
               <ToggleButton key={o} value={o}>
                 {OUTCOME_LABEL[o]}
               </ToggleButton>
@@ -698,7 +775,13 @@ export default function RequestPanel({
                 />
               )}
               <TextField
-                label={outcome === 'not_interested' ? 'Why not? (required)' : 'Note (optional)'}
+                label={
+                  outcome === 'not_interested'
+                    ? 'Why not? (required)'
+                    : outcome === 'joined_elsewhere'
+                      ? 'Which class, or anything else? (required)'
+                      : 'Note (optional)'
+                }
                 value={callNote}
                 onChange={(e) => setCallNote(e.target.value)}
                 multiline
@@ -709,7 +792,7 @@ export default function RequestPanel({
                 <Button
                   variant="contained"
                   onClick={submitCall}
-                  disabled={!!busy || (outcome === 'call_back' && !callbackAt) || (outcome === 'not_interested' && !callNote.trim())}
+                  disabled={!!busy || (outcome === 'call_back' && !callbackAt) || (CLOSING.includes(outcome) && !callNote.trim())}
                   startIcon={busy === 'call' ? <CircularProgress size={16} color="inherit" /> : undefined}
                   sx={{ minHeight: 44 }}
                 >
@@ -729,6 +812,9 @@ export default function RequestPanel({
             </Button>
             <Button onClick={() => run('resend', { action: 'resend' })} disabled={!!busy} sx={{ minHeight: 44 }}>
               {busy === 'resend' ? 'Sending' : 'Resend "request received"'}
+            </Button>
+            <Button startIcon={<SnoozeIcon />} onClick={() => setLaterOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+              Try later
             </Button>
             <Button color="error" onClick={() => setReasonFor('cancel')} disabled={!!busy} sx={{ minHeight: 44 }}>
               Close request
@@ -750,14 +836,14 @@ export default function RequestPanel({
                     ? linkIsReallyPaid(detail.enrolmentLink)
                       ? 'Follow-up closed: they enrolled.'
                       : linkIsUnfinalisedRecorded(detail.enrolmentLink)
-                        ? `${linkMoneyLine(detail.enrolmentLink!)} entered on the enrolment link but not finalised. Finalise to enrol them.`
+                        ? `${linkMoneyLine(detail.enrolmentLink!)} entered on the enrolment link but not finalised. Confirm to enrol them.`
                         : 'They said they would join, but no fee is recorded yet. Record the payment or send the enrolment link to enrol them.'
                     : `${closedReason(r, lastFollowUp)}.`
                   : 'No follow-up yet. Start one so this student is called until they join or say no.'}
               </Typography>
               {linkIsUnfinalisedRecorded(detail.enrolmentLink) && (
                 <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setFinaliseOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
-                  Finalise enrolment
+                  Confirm and enrol
                 </Button>
               )}
               {canRecordEnrolment && (
@@ -1214,7 +1300,34 @@ export default function RequestPanel({
         }}
       />
 
-      <Dialog open={reasonFor === 'cancel'} onClose={() => setReasonFor(null)} fullWidth maxWidth="xs" aria-labelledby="cancel-title">
+      <TryLaterDialog
+        open={laterOpen}
+        name={r.name}
+        confirmed={r.status === 'approved'}
+        hasEmail={!!laterEmail}
+        now={now}
+        busy={busy === 'try_later'}
+        error={laterOpen ? error : null}
+        onClose={() => {
+          setLaterOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (body) => {
+          const err = await run('try_later', body);
+          if (!err) setLaterOpen(false);
+        }}
+      />
+
+      <Dialog
+        open={reasonFor === 'cancel'}
+        onClose={() => {
+          setReasonFor(null);
+          setJoinedElsewhere(false);
+        }}
+        fullWidth
+        maxWidth="xs"
+        aria-labelledby="cancel-title"
+      >
         <DialogTitle id="cancel-title">{r.status === 'approved' ? 'Cancel this demo?' : 'Close this request?'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1223,9 +1336,27 @@ export default function RequestPanel({
               : 'No message is sent. You can reopen it later.'}
           </Typography>
           <TextField label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} fullWidth required autoFocus inputProps={{ maxLength: 200 }} />
+          <FormControlLabel
+            control={<Checkbox checked={joinedElsewhere} onChange={(e) => setJoinedElsewhere(e.target.checked)} />}
+            label={
+              <Box>
+                <Typography variant="body2">They joined another class</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Kept on a list for a study-material offer later. If they only asked to wait, use Try later instead.
+                </Typography>
+              </Box>
+            }
+            sx={{ mt: 1.5, alignItems: 'flex-start', minHeight: 44, '& .MuiCheckbox-root': { mt: -0.5 } }}
+          />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setReasonFor(null)} sx={{ minHeight: 44 }}>
+          <Button
+            onClick={() => {
+              setReasonFor(null);
+              setJoinedElsewhere(false);
+            }}
+            sx={{ minHeight: 44 }}
+          >
             Back
           </Button>
           <Button
@@ -1234,10 +1365,11 @@ export default function RequestPanel({
             disabled={reason.trim().length < 3 || !!busy}
             sx={{ minHeight: 44 }}
             onClick={async () => {
-              const err = await run('cancel', { action: 'cancel', reason });
+              const err = await run('cancel', { action: 'cancel', reason, joinedElsewhere });
               if (!err) {
                 setReasonFor(null);
                 setReason('');
+                setJoinedElsewhere(false);
               }
             }}
           >

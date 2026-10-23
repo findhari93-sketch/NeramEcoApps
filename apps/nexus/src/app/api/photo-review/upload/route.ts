@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createUserAvatar, getSupabaseAdminClient } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
+import { pushApprovedPhotosToMicrosoft } from '@/lib/photo-ms-sync';
 
 /**
  * POST /api/photo-review/upload  (staff)
@@ -111,6 +112,9 @@ export async function POST(request: NextRequest) {
       reason: 'Uploaded by staff on the student behalf',
       reviewed_by: staff.id,
     });
+
+    // An approved photo goes to Microsoft (Teams) like every other approval. Never throws.
+    await pushApprovedPhotosToMicrosoft([studentId]);
 
     return NextResponse.json({ success: true, url: publicUrl });
   } catch (err) {

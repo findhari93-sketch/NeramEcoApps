@@ -17,13 +17,18 @@ import {
   IconButton,
   Portal,
   Collapse,
+  Menu,
+  MenuItem,
+  ButtonBase,
 } from '@mui/material';
 import { useMediaQuery, useTheme } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 import React from 'react';
 import type { TransitionProps } from '@mui/material/transitions';
 import { ConnectToOffice } from '../ChatWidget/ConnectToOffice';
 import { trackSignupVerified } from '../../analytics/conversions';
+import { PHONE_COUNTRIES, openingPhone, type PhoneDial } from './phoneCountries';
 
 /**
  * Where this visitor came from, for a cross-origin sign-up (the app cannot read
@@ -121,15 +126,20 @@ export interface LoginModalProps {
   onClose?: () => void;
   /** Can user dismiss the modal? Default: true */
   allowClose?: boolean;
-  /** Called after login + phone verification complete. Passes verified phone number if available. */
-  onAuthenticated?: (phoneNumber?: string) => void;
+  /**
+   * Called after login + phone verification complete. Passes the verified
+   * number's national digits and, second, the full number with its code
+   * ("+971551993240"). Read the second: the student may pick another country
+   * in the dialog than the dialCode it opened on.
+   */
+  onAuthenticated?: (phoneNumber?: string, fullPhone?: string) => void;
   /** Base URL for API calls. Empty string for same-origin, full URL for cross-origin */
   apiBaseUrl: string;
   /** Skip phone verification step (for already-verified users) */
   skipPhoneVerification?: boolean;
   /** Start directly at phone verification step */
   phoneOnly?: boolean;
-  /** Pre-fill the phone number input */
+  /** Pre-fill the phone number input. A number with a listed code ("+971...") opens on that country. */
   initialPhone?: string;
   /** Optional callback for funnel event tracking */
   onFunnelEvent?: (event: FunnelEventData) => void;
@@ -147,7 +157,7 @@ export interface LoginModalProps {
    * notices the click by itself. Default: false.
    */
   requireEmailVerification?: boolean;
-  /** Country dialling code for the phone step. Default: '+91'. */
+  /** Country dialling code the phone step opens on; the student can pick India or a Gulf country there. Default: '+91'. */
   dialCode?: string;
   /** Digits in a national mobile number for `dialCode`. Default: 10. */
   phoneLength?: number;
@@ -280,7 +290,10 @@ export default function LoginModal({
   const advancingRef = useRef(false);
 
   // Phone state
-  const [phoneNumber, setPhoneNumber] = useState(initialPhone);
+  // The code opens on the caller's (India unless told otherwise); the student can pick another.
+  const [dial, setDial] = useState<PhoneDial>(() => openingPhone(initialPhone, dialCode, phoneLength).dial);
+  const [countryAnchor, setCountryAnchor] = useState<HTMLElement | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState(() => openingPhone(initialPhone, dialCode, phoneLength).digits);
   const [otp, setOtp] = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
@@ -303,7 +316,9 @@ export default function LoginModal({
   const phoneDoneRef = useRef(false);
 
   const showEscapeHatch = (allowEscapeHatch || !!onGetHelp) && failedAttempts >= maxAttemptsBeforeEscape;
-  const fullPhone = `${dialCode}${phoneNumber}`;
+  const activeDialCode = dial.prefix;
+  const activeLength = dial.length;
+  const fullPhone = `${activeDialCode}${phoneNumber}`;
 
   // Reset state each time the dialog OPENS. Only on the closed-to-open edge: a
   // late change to initialPhone (say, a profile prefill arriving) must not wipe
@@ -318,7 +333,10 @@ export default function LoginModal({
       setEmail('');
       setPassword('');
       setFullName('');
-      setPhoneNumber(initialPhone);
+      const opening = openingPhone(initialPhone, dialCode, phoneLength);
+      setDial(opening.dial);
+      setPhoneNumber(opening.digits);
+      setCountryAnchor(null);
       setOtp('');
       setIsSignUp(false);
       setResendTimer(0);
@@ -344,7 +362,7 @@ export default function LoginModal({
       }
     }
     wasOpenRef.current = open;
-  }, [open, phoneOnly, initialPhone, requireEmailVerification]);
+  }, [open, phoneOnly, initialPhone, requireEmailVerification, dialCode, phoneLength]);
 
   // Reinitialize the reCAPTCHA verifier. Firebase consumes the verifier on every
   // signInWithPhoneNumber call, so we recreate it before each send. The container
@@ -708,8 +726,8 @@ export default function LoginModal({
   // ---- Phone Handlers ----
 
   const handleSendOtp = async () => {
-    if (phoneNumber.length !== phoneLength) {
-      setPhoneError(`Please enter a valid ${phoneLength}-digit phone number`);
+    if (phoneNumber.length !== activeLength) {
+      setPhoneError(`Please enter a valid ${activeLength}-digit phone number`);
       return;
     }
 
@@ -796,7 +814,7 @@ export default function LoginModal({
       }
 
       phoneDoneRef.current = true;
-      onAuthenticated?.(phoneNumber);
+      onAuthenticated?.(phoneNumber, fullPhone);
     } catch (err: any) {
       const errMsg = err?.message || '';
       if (err?.code === 'neram/phone-in-use' || errMsg.includes('already registered')) {
@@ -845,7 +863,7 @@ export default function LoginModal({
       fireSignupConversion(verified, fullPhone);
       onFunnelEvent?.({ funnel: 'auth', event: 'phone_account_switched', status: 'completed' });
       phoneDoneRef.current = true;
-      onAuthenticated?.(phoneNumber);
+      onAuthenticated?.(phoneNumber, fullPhone);
     } catch (err: any) {
       setPhoneError(getFirebaseErrorMessage(err));
       setFailedAttempts((n) => n + 1);
@@ -984,8 +1002,8 @@ export default function LoginModal({
             {step === 'login' && 'Sign in to access your Neram Classes account'}
             {step === 'verifyEmail' && 'Confirm your email to keep your account safe'}
             {step === 'phone' && 'We need to verify your phone for account security'}
-            {step === 'otp' && `Enter the OTP sent to ${dialCode} ${phoneNumber}`}
-            {step === 'phoneInUse' && `${dialCode} ${phoneNumber} is already on a Neram account`}
+            {step === 'otp' && `Enter the OTP sent to ${activeDialCode} ${phoneNumber}`}
+            {step === 'phoneInUse' && `${activeDialCode} ${phoneNumber} is already on a Neram account`}
           </Typography>
         </Box>
         {allowClose && onClose && (
@@ -1209,27 +1227,86 @@ export default function LoginModal({
               </Alert>
 
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Enter your {phoneLength}-digit mobile number
+                Enter your {activeLength}-digit mobile number. Outside India? Tap {activeDialCode} to pick your country.
               </Typography>
               <TextField
                 fullWidth
                 label="Phone Number"
-                placeholder="9876543210"
+                type="tel"
+                placeholder={dial.placeholder || undefined}
                 value={phoneNumber}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, phoneLength);
-                  setPhoneNumber(value);
+                  const raw = e.target.value;
+                  // A whole number pasted with its code ("+971 55 199 3240") picks its country.
+                  if (raw.trim().startsWith('+')) {
+                    const pasted = openingPhone(raw, activeDialCode, activeLength);
+                    setDial(pasted.dial);
+                    setPhoneNumber(pasted.digits.slice(0, pasted.dial.length));
+                  } else {
+                    setPhoneNumber(raw.replace(/\D/g, '').slice(0, activeLength));
+                  }
                   setPhoneError('');
                 }}
                 InputProps={{
                   startAdornment: (
-                    <Typography variant="body1" color="text.secondary" sx={{ mr: 1 }}>
-                      {dialCode}
-                    </Typography>
+                    <>
+                      <ButtonBase
+                        onClick={(e) => setCountryAnchor(e.currentTarget)}
+                        aria-haspopup="menu"
+                        aria-expanded={!!countryAnchor}
+                        aria-label={`Country code ${activeDialCode}. Change country`}
+                        sx={{
+                          flex: 'none',
+                          minWidth: 64,
+                          minHeight: 44,
+                          px: 1,
+                          ml: -1,
+                          mr: 1,
+                          gap: 0.25,
+                          borderRadius: 1,
+                          fontSize: 18,
+                          fontWeight: 600,
+                          color: 'text.primary',
+                          '&:hover': { bgcolor: 'action.hover' },
+                          '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
+                        }}
+                      >
+                        {activeDialCode}
+                        <ExpandMore aria-hidden sx={{ fontSize: 20, color: 'text.secondary' }} />
+                      </ButtonBase>
+                      <Menu
+                        anchorEl={countryAnchor}
+                        open={!!countryAnchor}
+                        onClose={() => setCountryAnchor(null)}
+                        // Above this dialog when it is raised over a chat drawer.
+                        sx={zIndex !== undefined ? { zIndex: zIndex + 1 } : undefined}
+                      >
+                        {PHONE_COUNTRIES.map((c) => (
+                          <MenuItem
+                            key={c.code}
+                            selected={c.prefix === activeDialCode}
+                            onClick={() => {
+                              setCountryAnchor(null);
+                              if (c.prefix === activeDialCode) return;
+                              // A new code is a new number.
+                              setDial(c);
+                              setPhoneNumber('');
+                              setPhoneError('');
+                            }}
+                            sx={{ minHeight: 48, gap: 1.5 }}
+                          >
+                            <Box component="span" sx={{ fontWeight: 700, minWidth: 48 }}>
+                              {c.prefix}
+                            </Box>
+                            {c.name}
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                    </>
                   ),
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && phoneNumber.length === phoneLength && !phoneLoading) {
+                  if (e.key === 'Enter' && phoneNumber.length === activeLength && !phoneLoading) {
                     e.preventDefault();
                     void handleSendOtp();
                   }
@@ -1271,7 +1348,7 @@ export default function LoginModal({
               <Typography variant="body2" color="text.secondary" component="p" sx={{ mb: 1 }}>
                 Enter the 6-digit code sent to{' '}
                 <Box component="span" sx={{ color: 'text.primary', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {formatSentTo(dialCode, phoneNumber)}
+                  {formatSentTo(activeDialCode, phoneNumber)}
                 </Box>{' '}
                 <Button
                   variant="text"
@@ -1391,7 +1468,7 @@ export default function LoginModal({
             fullWidth
             size="large"
             onClick={handleSendOtp}
-            disabled={phoneLoading || phoneNumber.length !== phoneLength}
+            disabled={phoneLoading || phoneNumber.length !== activeLength}
             sx={{ py: 1.5, fontSize: '16px', minHeight: 48 }}
           >
             {phoneLoading ? <CircularProgress size={24} color="inherit" /> : 'Send OTP'}

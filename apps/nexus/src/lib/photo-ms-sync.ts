@@ -12,15 +12,23 @@
  * would put an unvetted image on the student's tenant-wide identity, visible to
  * everyone in the organisation, which is exactly what the review exists to stop.
  *
+ * Only a TEACHER's approval pushes: approve, Confirm on the Auto-approved tab,
+ * or a staff upload on the student's behalf. An automatic approval by the face
+ * check waits for that Confirm (founder's call 2026-09-10, kept 2026-10-23), so
+ * a later rejection never has to chase a picture that is already on Teams.
+ * Every teacher approval goes through {@link pushApprovedPhotosToMicrosoft}.
+ *
  * Requires the ProfilePhoto.ReadWrite.All application permission with admin
  * consent. Even with it, app-only photo access needs the target account to have
- * an Exchange Online mailbox, so failure is expected for some users and is
- * always recorded rather than thrown.
+ * an Exchange Online mailbox, so failure is expected for some users (a brand new
+ * account has none for a while) and is always recorded rather than thrown.
+ * {@link retryMicrosoftPhotoPushes} is the daily second attempt.
  */
 
 import { createHash } from 'crypto';
 import {
   getSupabaseAdminClient,
+  getNexusSetting,
   createUserAvatar,
   getLatestMsAvatarHash,
   decideMicrosoftPull,
@@ -30,6 +38,10 @@ import {
 import { getUserPhotoResult, setUserPhoto, classifyGraphError } from '@neram/auth';
 import { resolvePhotoOrigin, isExternallyHosted } from './photo-origin';
 import { toPhotoStatus } from './photo-gate';
+import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from './feature-flags';
+
+/** Mirroring an approved photo onto the student's real Microsoft identity. */
+export const MS_PUSH_FEATURE = 'staff.photo-ms-push';
 
 /** Mirrors the CHECK constraint on users.photo_ms_sync_status. */
 export type MsPushStatus =
@@ -253,6 +265,170 @@ export async function pushApprovedPhotoToMicrosoft(userId: string): Promise<MsPu
     return record('synced', fingerprint.ok ? undefined : fingerprint.message);
   } catch (err: any) {
     return record('failed', err?.message || 'The photo could not be sent to Microsoft.');
+  }
+}
+
+/** Whether staff.photo-ms-push is on. A settings read that fails reads as the default. */
+export async function isMicrosoftPhotoPushEnabled(): Promise<boolean> {
+  const setting = await getNexusSetting(FEATURE_FLAGS_KEY).catch(() => null);
+  const flags: FlagMap = resolveFlags(((setting as any)?.value as FlagMap) || {});
+  return flags[MS_PUSH_FEATURE] === true;
+}
+
+/**
+ * The one door every teacher approval goes through on its way to Microsoft: an
+ * approve or Confirm (api/photo-review) and a staff upload
+ * (api/photo-review/upload). Never called for an automatic approval.
+ *
+ * Honours the staff.photo-ms-push switch. Never throws and never rejects: every
+ * student gets a result, and each push records its own outcome on the users
+ * row (photo_ms_sync_status), which is what the daily retry reads.
+ */
+export async function pushApprovedPhotosToMicrosoft(userIds: string[]): Promise<MsPushResult[]> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+
+  let enabled = false;
+  try {
+    enabled = await isMicrosoftPhotoPushEnabled();
+  } catch {
+    enabled = false;
+  }
+  if (!enabled) {
+    return ids.map((userId) => ({
+      userId,
+      status: 'disabled' as const,
+      message: 'Copying photos to Microsoft is switched off.',
+    }));
+  }
+
+  return Promise.all(
+    ids.map((userId) =>
+      pushApprovedPhotoToMicrosoft(userId).catch((e) => ({
+        userId,
+        status: 'failed' as const,
+        message: e instanceof Error ? e.message : 'Could not reach Microsoft.',
+      })),
+    ),
+  );
+}
+
+/**
+ * Outcomes worth another try. A brand new account usually has no mailbox for a
+ * while (no_mailbox), Graph throttles and blips (throttled, failed), storage
+ * can be briefly unreadable (no_photo), and consent can be fixed after the fact
+ * (denied). Only 'synced' and 'no_account' are final.
+ */
+export const RETRYABLE_PUSH_STATUSES: MsPushStatus[] = [
+  'failed',
+  'throttled',
+  'no_mailbox',
+  'no_photo',
+  'denied',
+  'disabled',
+];
+
+/** Students per retry run. Small on purpose: the cron that carries this has other work. */
+export const PUSH_RETRY_LIMIT = 20;
+const PUSH_RETRY_CONCURRENCY = 3;
+/** Stop starting new pushes past this, so the host cron stays inside its maxDuration. */
+const PUSH_RETRY_BUDGET_MS = 35_000;
+
+export interface PushRetrySummary {
+  enabled: boolean;
+  considered: number;
+  synced: number;
+  stillFailing: number;
+  byStatus: Partial<Record<MsPushStatus, number>>;
+  error?: string;
+}
+
+export interface PushRetryOptions {
+  /** Injected in tests. Defaults to the service-role client. */
+  supabase?: any;
+  /** Injected in tests. Defaults to pushApprovedPhotoToMicrosoft. */
+  push?: (userId: string) => Promise<MsPushResult>;
+  /** Injected in tests. Defaults to reading the feature flag. */
+  enabled?: () => Promise<boolean>;
+  limit?: number;
+  budgetMs?: number;
+}
+
+/**
+ * Second attempt for teacher-approved photos that did not reach Microsoft.
+ *
+ * Picks approved students with a Microsoft account whose last push ended in a
+ * retryable status. A push only ever starts from a teacher's approval, so this
+ * never copies a photo the face check approved on its own (photo_review_method
+ * 'auto' is also excluded outright, in case a status was left behind).
+ *
+ * A photo with status NULL is deliberately left alone: never pushed means
+ * either an automatic approval still waiting for Confirm, or a photo approved
+ * while the push was switched off, and copying those is a separate decision.
+ *
+ * Newest approvals first, so a fresh account whose mailbox has just appeared is
+ * retried ahead of an old account that will never have one. Never throws.
+ */
+export async function retryMicrosoftPhotoPushes(
+  opts: PushRetryOptions = {},
+): Promise<PushRetrySummary> {
+  const summary: PushRetrySummary = {
+    enabled: false,
+    considered: 0,
+    synced: 0,
+    stillFailing: 0,
+    byStatus: {},
+  };
+
+  try {
+    const enabled = await (opts.enabled ?? isMicrosoftPhotoPushEnabled)().catch(() => false);
+    summary.enabled = enabled;
+    if (!enabled) return summary;
+
+    const supabase = opts.supabase ?? (getSupabaseAdminClient() as any);
+    const push = opts.push ?? pushApprovedPhotoToMicrosoft;
+    const limit = opts.limit ?? PUSH_RETRY_LIMIT;
+    const deadline = Date.now() + (opts.budgetMs ?? PUSH_RETRY_BUDGET_MS);
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('photo_status', 'approved')
+      .not('ms_oid', 'is', null)
+      .in('photo_ms_sync_status', RETRYABLE_PUSH_STATUSES)
+      .or('photo_review_method.is.null,photo_review_method.neq.auto')
+      .order('photo_reviewed_at', { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (error) {
+      summary.error = error.message || 'Could not list photos to retry.';
+      return summary;
+    }
+
+    const ids: string[] = ((data || []) as Array<{ id: string }>).map((r) => r.id).filter(Boolean);
+    summary.considered = ids.length;
+
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(PUSH_RETRY_CONCURRENCY, ids.length) }, async () => {
+      while (cursor < ids.length && Date.now() < deadline) {
+        const userId = ids[cursor++];
+        const result = await push(userId).catch(
+          (e): MsPushResult => ({
+            userId,
+            status: 'failed',
+            message: e instanceof Error ? e.message : 'Could not reach Microsoft.',
+          }),
+        );
+        summary.byStatus[result.status] = (summary.byStatus[result.status] ?? 0) + 1;
+        if (result.status === 'synced') summary.synced += 1;
+        else summary.stillFailing += 1;
+      }
+    });
+    await Promise.all(workers);
+    return summary;
+  } catch (err) {
+    summary.error = err instanceof Error ? err.message : 'The Microsoft photo retry failed.';
+    return summary;
   }
 }
 

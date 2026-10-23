@@ -13,7 +13,7 @@ import {
   formatDemoPreference,
   makeDemoRefCode,
   makeDemoJoinToken,
-  demoPhone10,
+  demoPhone,
   isPlausibleStatedExamYear,
   recordStatedExamYear,
   type DemoWindow,
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       .select('id, phone, phone_verified, email, name')
       .eq('id', auth.userId)
       .single();
-    const phone = user?.phone_verified ? demoPhone10(user.phone) : null;
+    const phone = user?.phone_verified ? demoPhone(user.phone) : null;
     if (!phone) return NextResponse.json({ error: 'PHONE_REQUIRED' }, { status: 428 });
 
     const settings = await loadDemoSettings();
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     const language = LANGS.has(str(body.language, 5)) ? str(body.language, 5) : null;
     const interest = INTERESTS.has(str(body.interestCourse, 20)) ? str(body.interestCourse, 20) : null;
     const parentJoining = body.parentJoining === true;
-    const parentPhone = parentJoining ? demoPhone10(str(body.parentPhone, 20)) : null;
+    const parentPhone = parentJoining ? demoPhone(str(body.parentPhone, 20)) : null;
     const parentName = parentJoining ? str(body.parentName, 100) || null : null;
 
     // A ref clash is astronomically rare but cheap to retry.

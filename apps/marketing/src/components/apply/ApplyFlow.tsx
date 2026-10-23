@@ -331,10 +331,11 @@ export default function ApplyFlow() {
         initialPhone={formData.personal.phone}
         dialCode={country.phonePrefix}
         phoneLength={country.phoneLength}
-        onAuthenticated={(verifiedPhone) => {
+        onAuthenticated={(verifiedPhone, fullPhone) => {
           setShowPhoneVerification(false);
           // No number back means the account was already verified: re-read it.
-          if (verifiedPhone) onPhoneVerified(verifiedPhone);
+          // The full number: the student may have picked another country in the dialog.
+          if (verifiedPhone) onPhoneVerified(fullPhone || verifiedPhone);
           else refreshAccount();
         }}
         apiBaseUrl={APP_URL}
@@ -350,11 +351,12 @@ export default function ApplyFlow() {
         requireEmailVerification
         dialCode={country.phonePrefix}
         phoneLength={country.phoneLength}
-        onAuthenticated={(verifiedPhone) => {
+        onAuthenticated={(verifiedPhone, fullPhone) => {
           setShowLoginModal(false);
           autoPromptedRef.current = true;
           markApplicationStarted();
-          if (verifiedPhone) onPhoneVerified(verifiedPhone);
+          // The full number: the student may have picked another country in the dialog.
+          if (verifiedPhone) onPhoneVerified(fullPhone || verifiedPhone);
           else refreshAccount();
         }}
         apiBaseUrl={APP_URL}

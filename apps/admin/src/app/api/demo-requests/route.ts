@@ -12,7 +12,8 @@ import {
   getActiveDemoRequestForUser,
   logDemoRequestEvent,
   enqueueDemoMessages,
-  demoPhone10,
+  demoPhone,
+  mobileE164,
   listDemoFollowUpsByDemo,
   isPlausibleStatedExamYear,
   recordStatedExamYear,
@@ -226,7 +227,7 @@ async function updatePickedPerson(
   // On a parent's account the typed email and mobile are usually the student's.
   if (accountHolder === 'student') {
     if (!user.email && typed.email) patch.email = typed.email;
-    if (!user.phone) patch.phone = `+91${typed.phone}`;
+    if (!user.phone) patch.phone = mobileE164(typed.phone);
   }
   const meta = user.metadata ?? {};
   if ((meta.account_holder ?? 'student') !== accountHolder) patch.metadata = { ...meta, account_holder: accountHolder };
@@ -314,8 +315,8 @@ export async function POST(req: Request) {
     const planned = mode === 'planned' ? await parsePlanned(body, supabase) : null;
 
     // ---- Who
-    const phone = demoPhone10(str(body.phone, 20));
-    if (!phone) throw new AddError('Enter a 10-digit Indian mobile number.');
+    const phone = demoPhone(str(body.phone, 20));
+    if (!phone) throw new AddError('Enter a mobile number from India or the Gulf.');
     const emailIn = str(body.email).toLowerCase();
     const email = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailIn) ? emailIn : null;
     let user: { id: string; name: string | null; email: string | null; phone: string | null; metadata: Record<string, unknown> | null } | null = null;
@@ -338,7 +339,7 @@ export async function POST(req: Request) {
         {
           name,
           email,
-          phone: `+91${phone}`,
+          phone: mobileE164(phone),
           username: null,
           avatar_url: null,
           firebase_uid: null,
@@ -370,7 +371,7 @@ export async function POST(req: Request) {
     }
 
 
-    const parentPhone = demoPhone10(str(body.parentPhone, 20));
+    const parentPhone = demoPhone(str(body.parentPhone, 20));
     const parentName = str(body.parentName, 100) || null;
     const currentClass = CLASSES.has(str(body.currentClass, 20)) ? str(body.currentClass, 20) : null;
     const base = {

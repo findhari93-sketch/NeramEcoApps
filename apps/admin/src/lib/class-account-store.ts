@@ -24,6 +24,7 @@ import {
 } from '@neram/auth/student-accounts';
 import { enrollUser, getCurrentClassroom, recordUserHistory } from '@neram/database';
 import { sendClassAccountWelcomeEmail } from '@neram/database/class-account';
+import { surnameFrom } from '@neram/database/person-name';
 
 const STAFF_TYPES = new Set(['admin', 'teacher']);
 const OWN_DOMAIN = /@(neramclasses\.com|neramclasses\.onmicrosoft\.com)$/i;
@@ -44,6 +45,19 @@ export async function readClassAccountSetup(supabase: any, userId: string): Prom
   const { data, error } = await supabase.from('class_account_setups').select('*').eq('user_id', userId).maybeSingle();
   if (error) throw error;
   return data ? { ...rowToSetup(data), row: data } : null;
+}
+
+/** The student's name as typed on their demo requests and enrolment links. */
+async function namesOnFile(supabase: any, userId: string): Promise<string[]> {
+  const [{ data: demos }, { data: links }] = await Promise.all([
+    supabase.from('demo_class_registrations').select('name').eq('user_id', userId).limit(5),
+    supabase
+      .from('direct_enrollment_links')
+      .select('student_name')
+      .or(`user_id.eq.${userId},submitted_user_id.eq.${userId},used_by.eq.${userId}`)
+      .limit(5),
+  ]);
+  return [...(demos || []).map((d: any) => d.name), ...(links || []).map((l: any) => l.student_name)].filter(Boolean);
 }
 
 /** The record a class account is made for, with the father's name the login ID is built from. */
@@ -76,7 +90,9 @@ export async function readClassAccountStudent(supabase: any, userId: string): Pr
 
   const nameWords = String(user.name || '').trim().split(/\s+/).filter(Boolean);
   const firstName = String(user.first_name || nameWords[0] || '').trim();
-  const lastName = String(user.last_name || (user.first_name ? '' : nameWords.slice(1).join(' ')) || '').trim() || null;
+  // Teams shows first and last name. Enrolment keeps only the first name, so the
+  // surname comes from the fullest name we hold: the record, the demo, the link.
+  const lastName = String(user.last_name || '').trim() || surnameFrom(firstName, [user.name, ...(await namesOnFile(supabase, userId))]);
   // The Gmail they enrolled with. A login already on our domain is not a personal address.
   const personal = [user.personal_email, user.email].find((e) => e && !OWN_DOMAIN.test(String(e))) || null;
 
@@ -206,12 +222,24 @@ export function createClassAccountPorts(supabase: any, actorId: string): ClassAc
 
       async syncTeams({ userId, classroomId, upn }) {
         const result = await addStudentToClassroomTeams(supabase, { classroomId, userId, upn, source: 'class_account' });
-        if (!result.team) return { status: 'skipped', reason: 'This classroom has no linked Microsoft Team.' };
-        if (result.team.success) return { status: 'done' };
-        return {
-          status: 'failed',
-          reason: 'Not in the class Team yet. A brand new account can take a few minutes to reach Microsoft Teams. Retry in 5 minutes.',
-        };
+        if (result.team && !result.team.success) {
+          return {
+            status: 'failed',
+            reason: 'Not in the class Team yet. A brand new account can take a few minutes to reach Microsoft Teams. Retry in 5 minutes.',
+          };
+        }
+        // The student group chat is added in the same run. Both adds are safe to repeat,
+        // so a chat that did not take keeps the step open for Retry.
+        if (result.groupChat && !result.groupChat.success) {
+          return {
+            status: 'failed',
+            reason: result.team
+              ? 'In the class Team, but not in the student group chat yet. Retry in 5 minutes, or add them from the group chat in Teams.'
+              : 'Not in the student group chat yet. Retry in 5 minutes, or add them from the group chat in Teams.',
+          };
+        }
+        if (!result.team && !result.groupChat) return { status: 'skipped', reason: 'This classroom has no linked Microsoft Team.' };
+        return { status: 'done' };
       },
 
       async sendWelcome({ student, upn }) {

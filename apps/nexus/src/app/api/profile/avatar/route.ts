@@ -127,6 +127,11 @@ export async function POST(req: NextRequest) {
         photo_rejection_reason: null,
         photo_review_method: null,
         photo_ai_check: null,
+        // The Microsoft copy status described the PREVIOUS photo. Left as
+        // 'synced', it would tell the profile this one is already on Teams.
+        photo_ms_sync_status: null,
+        photo_ms_sync_error: null,
+        photo_ms_synced_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);
@@ -156,7 +161,8 @@ export async function POST(req: NextRequest) {
     //
     // The push now happens app-only when a teacher approves the photo, in
     // lib/photo-ms-sync.ts. An automatic approval does not push either: that
-    // waits for a teacher to confirm it.
+    // waits for a teacher to confirm it (founder's call, 2026-09-10, kept on
+    // 2026-10-23).
     return NextResponse.json({
       success: true,
       avatar: { id: avatar.id, url: publicUrl },

@@ -90,6 +90,10 @@ export interface DeskEnrolmentLink {
   /** The enrolled student's record (the class account is made for them). */
   user_id?: string | null;
   submitted_user_id?: string | null;
+  /** When staff say the money was paid (YYYY-MM-DD). */
+  payment_date?: string | null;
+  /** When the student first signed in with their class account (Nexus or own password). */
+  student_signed_in_at?: string | null;
 }
 
 export type { DeskStage, DeskPerson } from './journey';

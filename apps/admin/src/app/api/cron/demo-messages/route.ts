@@ -7,6 +7,7 @@ import { demoMarketingOrigin, sendDueDemoMessages, sweepCancelledDemoEvents } fr
 import { sendApplyDraftDemoNudges } from '@/lib/demo/draft-nudge';
 import { queueFollowUpNudges } from '@/lib/follow-up-digest';
 import { sweepDemoTeams } from '@/lib/demo/teams-sync';
+import { sendDueLaterNudges } from '@/lib/demo/try-later-server';
 
 /**
  * GET /api/cron/demo-messages (Vercel Cron, every 5 minutes; apps/admin/vercel.json)
@@ -15,7 +16,8 @@ import { sweepDemoTeams } from '@/lib/demo/teams-sync';
  * and retries of failed sends; also cancels the Teams meeting of any demo a
  * student cancelled on the website. Also sends the one "book a free demo"
  * WhatsApp to unfinished applications (off unless APPLY_DRAFT_DEMO_NUDGE=on).
- * And reads Teams attendance and recordings for demos that ran this week.
+ * And reads Teams attendance and recordings for demos that ran this week, and
+ * emails the family of a "Try later" request once its try-again date arrives.
  * Most runs find nothing.
  * Fails closed: a missing CRON_SECRET refuses the call.
  */
@@ -38,7 +40,11 @@ export async function GET(request: Request) {
       console.error('demo Teams sweep failed:', err);
       return 0;
     });
-    return NextResponse.json({ success: true, ...summary, meetingsCancelled, draftNudges, followUpNudges, teamsChecked });
+    const laterNudges = await sendDueLaterNudges({ origin: demoMarketingOrigin(request.url) }).catch((err) => {
+      console.error('try-later nudges failed:', err);
+      return null;
+    });
+    return NextResponse.json({ success: true, ...summary, meetingsCancelled, draftNudges, followUpNudges, teamsChecked, laterNudges });
   } catch (error) {
     console.error('demo-messages cron failed:', error);
     return NextResponse.json({ error: 'demo-messages cron failed' }, { status: 500 });

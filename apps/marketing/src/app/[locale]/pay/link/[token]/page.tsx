@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { createAdminClient, getLeadProfileByPaymentToken } from '@neram/database';
+import { createAdminClient, getLeadProfileByPaymentToken, normalisePhoneE164, mobileParts } from '@neram/database';
 import PaymentLinkContent from './PaymentLinkContent';
 
 export const metadata: Metadata = {
@@ -23,7 +23,8 @@ async function getPhoneForToken(token: string): Promise<string | null> {
     if (lead.payment_link_expires_at && new Date(lead.payment_link_expires_at) < new Date()) return null;
     if (lead.status !== 'approved') return null;
 
-    return lead.users?.phone ?? null;
+    // With its code, so the OTP reaches a Gulf number and an older 10-digit row alike.
+    return normalisePhoneE164(lead.users?.phone ?? null);
   } catch {
     return null;
   }
@@ -53,7 +54,8 @@ export default async function PaymentLinkPage({
     initialError = 'not_approved';
   } else {
     const phone = lead.users?.phone;
-    maskedPhone = phone ? `+91 ****${phone.slice(-5)}` : null;
+    // The number's own code: "+971 ****93240" for a UAE student, not +91.
+    maskedPhone = phone ? `${mobileParts(normalisePhoneE164(phone) ?? phone).country.prefix} ****${phone.replace(/\D/g, '').slice(-5)}` : null;
     applicationNumber = lead.application_number;
     alreadyLinked = !!(lead.users?.firebase_uid);
   }

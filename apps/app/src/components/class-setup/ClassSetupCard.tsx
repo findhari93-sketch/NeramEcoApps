@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * The dashboard's "Finish your class setup" card. A student who enrolled with a
- * direct link sees their 5-step progress (or "account on its way") and one
- * button back to /onboarding; the older checklist only shows for everyone else.
+ * The dashboard's "Finish your class setup" card. Every enrolled student sees
+ * their 5-step progress (or "account on its way") and one button back to
+ * /onboarding. Nothing shows for someone not enrolled, or once all 5 are done.
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -11,7 +11,6 @@ import { Box, Button, LinearProgress, Paper, Skeleton, Typography } from '@neram
 import { alpha } from '@mui/material/styles';
 import HourglassTopIcon from '@mui/icons-material/HourglassTop';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
-import OnboardingChecklist from '@/components/post-enrollment/OnboardingChecklist';
 import { classSetupIdToken } from './ClassSetupGuide';
 
 type Summary =
@@ -40,7 +39,7 @@ export default function ClassSetupCard() {
   }, []);
 
   if (summary === undefined) return <Skeleton variant="rounded" height={112} sx={{ mb: 2, borderRadius: 3 }} />;
-  if (!summary || (!summary.ready && !summary.pending)) return <OnboardingChecklist />;
+  if (!summary || (!summary.ready && !summary.pending)) return null;
   if (summary.ready && summary.count >= summary.total) return null;
 
   const pending = !summary.ready;

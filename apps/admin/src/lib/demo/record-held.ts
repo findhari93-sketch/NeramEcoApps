@@ -115,7 +115,9 @@ export async function recordHeldDemo(opts: {
   const fields: Partial<DemoRequest> = {
     status: held.attended ? 'attended' : 'no_show',
     attended: held.attended,
-    attendance_marked_at: new Date().toISOString(),
+    // Marked when the demo ended, not when staff typed it in: a demo held weeks ago
+    // must not read as fresh activity in the User CRM.
+    attendance_marked_at: new Date(Math.min(Date.now(), held.at.getTime() + minutes * 60_000)).toISOString(),
     scheduled_start: held.at.toISOString(),
     scheduled_minutes: minutes,
     tutor_upn: held.tutorUpn,

@@ -179,6 +179,30 @@ describe('finaliseEnrolmentFromDesk: payment date and method', () => {
     expect(input.payment).toMatchObject({ date: '2026-02-01', method: 'bank_transfer' });
   });
 
+  it('a student who paid earlier is enrolled on the day they paid, not today', async () => {
+    await finaliseEnrolmentFromDesk(supabase, {
+      link: link(),
+      demoId: 'demo-1',
+      actorId: 'staff-9',
+      money: { totalFee: 30000, amountPaid: 30000, paidOn: '2026-03-15' },
+      target: { mode: 'fold_parent', studentUserId: 'student-1' },
+    });
+    expect(createStudentProfile.mock.calls[0][0]).toMatchObject({ enrollment_date: '2026-03-15' });
+    const [, patch] = updateDirectEnrollmentLink.mock.calls[0];
+    expect(patch).toMatchObject({ used_at: '2026-03-15T12:00:00+05:30', payment_date: '2026-03-15' });
+  });
+
+  it('never enrols on a day in the future', async () => {
+    await finaliseEnrolmentFromDesk(supabase, {
+      link: link(),
+      demoId: 'demo-1',
+      actorId: 'staff-9',
+      money: { totalFee: 30000, amountPaid: 30000, paidOn: '2999-01-01' },
+      target: { mode: 'fold_parent', studentUserId: 'student-1' },
+    });
+    expect(createStudentProfile.mock.calls[0][0].enrollment_date).not.toBe('2999-01-01');
+  });
+
   it('defaults the payment date to today when none is given', async () => {
     await finaliseEnrolmentFromDesk(supabase, {
       link: link(),

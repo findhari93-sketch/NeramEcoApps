@@ -42,6 +42,7 @@ import {
   type DemoWindowId,
 } from '@neram/database/demo-schedule';
 import { examYearChoices } from '@neram/database/academic-year';
+import { mobileParts, storedMobile } from '@neram/database/phone';
 import { touchAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 import { ensureAccount, type EnsuredAccount } from '@/lib/ensure-account';
@@ -102,11 +103,12 @@ const FROM_PAGE_CODE: Record<string, string> = {
   apply_nudge: 'DC-WAN',
 };
 
-/** "+91 98xxx xx210": enough to recognise the number, not enough to copy it. */
+/** "+91 98xxx xx210" or "+971 55xxxx240": enough to recognise the number, not enough to copy it. */
 function maskPhone(phone: string | null | undefined): string {
-  const d = (phone || '').replace(/\D/g, '').slice(-10);
-  if (d.length !== 10) return phone || '';
-  return `+91 ${d.slice(0, 2)}xxx xx${d.slice(7)}`;
+  const { country, national } = mobileParts(phone);
+  if (country.code !== 'IN') return national.length === country.length ? `${country.prefix} ${national.slice(0, 2)}${'x'.repeat(national.length - 5)}${national.slice(-3)}` : phone || '';
+  if (national.length !== 10) return phone || '';
+  return `+91 ${national.slice(0, 2)}xxx xx${national.slice(7)}`;
 }
 
 const focusRing = { '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } };
@@ -311,7 +313,8 @@ export default function DemoBookingCard() {
   };
 
   const selectedDay = days.find((d) => d.date === draft.date) ?? null;
-  const parentPhoneOk = !draft.parentPhone || /^[6-9]\d{9}$/.test(draft.parentPhone.replace(/\D/g, '').slice(-10));
+  // India or the Gulf, the same numbers the server stores (demoPhone).
+  const parentPhoneOk = !draft.parentPhone || !!storedMobile(draft.parentPhone);
   const step0Done = draft.window === 'anytime' || (!!draft.date && !!draft.window);
   // The exam year picker: this season and the three after (1 July to 30 June IST).
   const yearChoices = useMemo(() => examYearChoices(now ?? new Date()), [now]);
@@ -882,9 +885,9 @@ export default function DemoBookingCard() {
                       label="Parent WhatsApp (optional)"
                       value={draft.parentPhone}
                       onChange={(e) => update({ parentPhone: e.target.value.replace(/[^\d+ ]/g, '') })}
-                      inputProps={{ inputMode: 'tel', maxLength: 15, style: { fontSize: 16 } }}
+                      inputProps={{ inputMode: 'tel', maxLength: 18, style: { fontSize: 16 } }}
                       error={!parentPhoneOk}
-                      helperText={parentPhoneOk ? 'Gets the reminders too' : 'Enter a 10-digit mobile number'}
+                      helperText={parentPhoneOk ? 'Gets the reminders too' : 'Enter a 10-digit mobile, or a Gulf number with its code (+971...)'}
                     />
                   </Box>
                 </Collapse>
@@ -919,7 +922,7 @@ export default function DemoBookingCard() {
         onClose={() => setPhoneDialog(false)}
         allowClose
         phoneOnly
-        initialPhone={(account?.phone || '').replace(/\D/g, '').slice(-10)}
+        initialPhone={account?.phone || ''}
         apiBaseUrl={APP_URL}
         onAuthenticated={onPhoneVerified}
       />

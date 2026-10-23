@@ -80,7 +80,10 @@ async function fetchMergeRow(supabase: any, id: string): Promise<MergeUserRow | 
 
 export async function finaliseEnrolmentFromDesk(supabase: any, input: DeskFinaliseInput): Promise<DeskFinaliseResult> {
   const { link, actorId, money } = input;
-  const paidOn = money.paidOn || istToday();
+  const today = istToday();
+  const paidOn = money.paidOn && money.paidOn < today ? money.paidOn : today;
+  // They joined when they paid, so a backfilled student keeps the real date.
+  const joinedAt = paidOn === today ? new Date().toISOString() : `${paidOn}T12:00:00+05:30`;
   const plan = normalisedPlan(money, paidOn);
   if (plan.amountPaid <= 0 || plan.totalFee <= 0) {
     return { ok: false, status: 400, error: 'Enter the total fee and the amount paid.' };
@@ -172,7 +175,7 @@ export async function finaliseEnrolmentFromDesk(supabase: any, input: DeskFinali
     const created = await createStudentProfile(
       {
         user_id: studentUserId,
-        enrollment_date: new Date().toISOString().split('T')[0],
+        enrollment_date: paidOn,
         batch_id: link.batch_id || null,
         course_id: link.course_id || null,
         ms_teams_id: null,
@@ -232,7 +235,7 @@ export async function finaliseEnrolmentFromDesk(supabase: any, input: DeskFinali
           currency: 'INR',
           status: 'paid',
           payment_method: money.method || 'manual',
-          paid_at: new Date().toISOString(),
+          paid_at: joinedAt,
           installment_number: 1,
           idempotency_key: `direct-link:${link.id}`,
           description: 'Finalised from the demo desk.',
@@ -249,7 +252,8 @@ export async function finaliseEnrolmentFromDesk(supabase: any, input: DeskFinali
     {
       status: 'used',
       used_by: studentUserId,
-      used_at: new Date().toISOString(),
+      used_at: joinedAt,
+      payment_date: paidOn,
       student_profile_id: studentProfileId,
       verified_by: actorId,
       verified_at: new Date().toISOString(),

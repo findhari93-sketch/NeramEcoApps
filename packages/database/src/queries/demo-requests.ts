@@ -11,6 +11,7 @@
 
 import type { TypedSupabaseClient } from '../client';
 import { getSupabaseAdminClient } from '../client';
+import { storedMobile } from '../utils/phone';
 import {
   ACTIVE_DEMO_STATUSES,
   istDateTime,
@@ -60,7 +61,12 @@ export interface DemoRequest {
   /** How a confirmed demo meets; null on rows confirmed before 2026-12 (derive it). */
   meeting_kind?: DemoMeetingKind | null;
   next_contact_at: string | null;
-  last_call_outcome: 'interested' | 'no_answer' | 'call_back' | 'not_interested' | null;
+  /** 'later': the family asked us to wait (next_contact_at is the try-again date). 'joined_elsewhere': closed, joined another class. */
+  last_call_outcome: 'interested' | 'no_answer' | 'call_back' | 'not_interested' | 'later' | 'joined_elsewhere' | null;
+  /** Why the family asked to wait (Try later). */
+  later_reason?: string | null;
+  /** When the try-again date was acted on: the family email went, or there was no address. */
+  later_nudged_at?: string | null;
   drawing_received_at: string | null;
   drawing_feedback_at: string | null;
   cancel_reason: string | null;
@@ -348,10 +354,13 @@ export async function listDemoRequestEvents(
   return (data ?? []) as DemoRequestEvent[];
 }
 
-/** Last 10 digits, or null when it is not an Indian mobile number. */
-export function demoPhone10(raw: string | null | undefined): string | null {
-  const d = (raw || '').replace(/\D/g, '').slice(-10);
-  return /^[6-9]\d{9}$/.test(d) ? d : null;
+/**
+ * The demo's mobile as stored: an Indian number as its 10 digits, a Gulf one
+ * with its code ("+971551993240"). Null when it is neither. WhatsApp sends to
+ * either shape.
+ */
+export function demoPhone(raw: string | null | undefined): string | null {
+  return storedMobile(raw);
 }
 
 /**
@@ -363,8 +372,8 @@ export async function enqueueDemoMessages(
   plan: Array<{ kind: DemoMessageKind; sendAfter: Date }>,
   client?: TypedSupabaseClient,
 ): Promise<void> {
-  const student = demoPhone10(request.phone);
-  const parent = demoPhone10(request.parent_phone);
+  const student = demoPhone(request.phone);
+  const parent = demoPhone(request.parent_phone);
   const rows = plan.flatMap((p) => {
     const base = { registration_id: request.id, kind: p.kind, send_after: p.sendAfter.toISOString() };
     const out: Array<Record<string, unknown>> = [];

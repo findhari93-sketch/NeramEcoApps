@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
-import { provisionClassAccount } from '@neram/auth/student-accounts';
+import { getSupabaseAdminClient, recordUserHistory } from '@neram/database';
+import { provisionClassAccount, setEntraName } from '@neram/auth/student-accounts';
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
-import { createClassAccountPorts } from '@/lib/class-account-store';
+import { createClassAccountPorts, readClassAccountStudent } from '@/lib/class-account-store';
 import { buildClassAccountView } from '@/lib/class-account-view';
 
 /** GET: the student's class account, or the ID staff would create. */
@@ -24,8 +24,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 /**
- * POST { username?, resendWelcome? }
+ * POST { username?, resendWelcome?, adopt?, syncName? }
  * Creates the class account, or carries on from the step that failed last time.
+ * adopt: the record already has a Microsoft account; keep it, never make a second
+ * one, and send no welcome email. syncName: put first and last name on the account.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const body = await request.json().catch(() => ({}));
@@ -35,11 +37,31 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   try {
     const supabase = getSupabaseAdminClient();
-    const result = await provisionClassAccount(createClassAccountPorts(supabase, adminId), {
+
+    if (body?.syncName === true) {
+      const student = await readClassAccountStudent(supabase, params.id);
+      if (!student?.msOid) return NextResponse.json({ error: 'There is no Microsoft account on this record yet.' }, { status: 409 });
+      const named = await setEntraName(student.msOid, { givenName: student.firstName, surname: student.lastName });
+      if (!named.ok) {
+        const message = named.error.fix ? `${named.error.message} ${named.error.fix}` : named.error.message;
+        return NextResponse.json({ error: message }, { status: named.status >= 400 ? named.status : 502 });
+      }
+      const name = [student.firstName, student.lastName].filter(Boolean).join(' ');
+      await recordUserHistory(supabase, params.id, 'class_account_name', null, name, adminId).catch(() => {});
+      return NextResponse.json({ success: true, data: await buildClassAccountView(supabase, params.id), name });
+    }
+
+    const ports = createClassAccountPorts(supabase, adminId);
+    if (body?.adopt === true) {
+      const student = await readClassAccountStudent(supabase, params.id);
+      if (!student?.msOid) return NextResponse.json({ error: 'There is no Microsoft account on this record to keep.' }, { status: 409 });
+    }
+    const result = await provisionClassAccount(ports, {
       userId: params.id,
       username: typeof body?.username === 'string' ? body.username : null,
       actorId: adminId,
       resendWelcome: body?.resendWelcome === true,
+      welcome: body?.adopt === true ? false : undefined,
     });
 
     if (result.kind === 'invalid' || result.kind === 'conflict') {

@@ -270,7 +270,7 @@ export default function ApplicationCard() {
           onClose={() => setPhoneDialog(false)}
           allowClose
           phoneOnly
-          initialPhone={(account?.phone || '').replace(/\D/g, '').slice(-10)}
+          initialPhone={account?.phone || ''}
           apiBaseUrl={APP_URL}
           // Above the chat drawer (1450) and its menus (1460).
           zIndex={1500}

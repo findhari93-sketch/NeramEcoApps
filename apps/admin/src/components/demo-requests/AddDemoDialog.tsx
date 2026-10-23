@@ -26,6 +26,8 @@ import { STAFF_DEMO_CHANNELS, heldTutorOptions } from '@/lib/demo/staff-add';
 import type { DemoPerson } from '@/app/api/demo-requests/people/route';
 import PlannedDemoFields, { checkPlanned, defaultPlannedValue, plannedPayload, type PlannedValue } from './PlannedDemoFields';
 import HeldDemoFields, { checkHeld, defaultHeldValue, heldPayload, type HeldValue } from './HeldDemoFields';
+import MobileField from './MobileField';
+import { storedMobile } from '@neram/database/phone';
 import type { DeskSettings } from './types';
 
 export type AddMode = 'request' | 'planned' | 'held';
@@ -34,7 +36,8 @@ type Person = DemoPerson;
 
 const TYPE_LABEL: Record<string, string> = { lead: 'Lead', student: 'Student', parent: "Parent's account" };
 
-const phone10Of = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10);
+/** A person's number for the mobile field: kept with its code, so a Gulf number stays Gulf. */
+const mobileOf = (p: string | null) => (p || '').trim();
 
 const MODES: Array<{ id: Mode; title: string; body: string }> = [
   { id: 'request', title: 'Wants a demo', body: 'Goes to New. Call them and confirm a time as usual.' },
@@ -157,13 +160,13 @@ export default function AddDemoDialog({
   const fillFrom = (p: Person, asParent: boolean) => {
     if (asParent) {
       setParentName(p.name || '');
-      setParentPhone(phone10Of(p.phone));
+      setParentPhone(mobileOf(p.phone));
       setName('');
       setPhone('');
       setEmail('');
     } else {
       setName(p.name || '');
-      setPhone(phone10Of(p.phone));
+      setPhone(mobileOf(p.phone));
       setEmail(p.email || '');
       setParentName('');
       setParentPhone('');
@@ -184,8 +187,8 @@ export default function AddDemoDialog({
     if (person) fillFrom(person, on);
   };
 
-  const phone10 = phone.replace(/\D/g, '').slice(-10);
-  const phoneOk = /^[6-9]\d{9}$/.test(phone10);
+  // India or the Gulf, read the same way the server stores it (demoPhone).
+  const phoneOk = !!storedMobile(phone);
   const nameOk = name.trim().length >= 2;
   // Required: which year they will write NATA or JEE B.Arch (this season and the next three).
   const yearChoices = useMemo(() => examYearChoices(), []);
@@ -222,12 +225,12 @@ export default function AddDemoDialog({
           userId: person?.id,
           accountHolder: person && parentAccount ? 'parent' : 'student',
           name: name.trim(),
-          phone: phone10,
+          phone,
           email: email.trim(),
           currentClass,
           examYear,
           parentName: parentName.trim(),
-          parentPhone: parentPhone.replace(/\D/g, ''),
+          parentPhone,
           channel,
           ...(mode === 'request' ? { window, date: window === 'anytime' ? null : date, sendAck } : {}),
           ...(mode === 'held' ? heldPayload(held) : {}),
@@ -343,16 +346,14 @@ export default function AddDemoDialog({
             required
             autoComplete="off"
           />
-          <TextField
+          <MobileField
             label="Mobile (WhatsApp)"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={setPhone}
             onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
             error={touched.phone && !phoneOk}
-            helperText={touched.phone && !phoneOk ? '10-digit Indian mobile number' : ' '}
+            helperText={touched.phone && !phoneOk ? 'A full mobile number. Pick the country code first for a Gulf number.' : ' '}
             required
-            inputProps={{ inputMode: 'tel' }}
-            autoComplete="off"
           />
           <TextField label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
           <TextField select label="Class (optional)" value={currentClass} onChange={(e) => setCurrentClass(e.target.value)}>
@@ -364,13 +365,11 @@ export default function AddDemoDialog({
             ))}
           </TextField>
           <TextField label="Parent name (optional)" value={parentName} onChange={(e) => setParentName(e.target.value)} autoComplete="off" />
-          <TextField
+          <MobileField
             label="Parent mobile (optional)"
             value={parentPhone}
-            onChange={(e) => setParentPhone(e.target.value)}
-            inputProps={{ inputMode: 'tel' }}
+            onChange={setParentPhone}
             helperText="Gets copies of the WhatsApp messages"
-            autoComplete="off"
           />
         </Box>
 

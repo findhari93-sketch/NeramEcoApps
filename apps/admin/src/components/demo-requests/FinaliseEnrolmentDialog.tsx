@@ -27,11 +27,18 @@ const TYPE_LABEL: Record<string, string> = { student: 'Student', lead: 'Lead', p
 const phoneTail = (v: string | null | undefined) => (v || '').replace(/\D/g, '').slice(-10);
 const n = (v: string) => Number(String(v).replace(/[^\d.]/g, '')) || 0;
 
+/** Today in IST as YYYY-MM-DD, the latest day anyone can have joined. */
+function istToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
 /**
- * Finalise a recorded payment that was entered on the enrolment link but never
- * finalised: record the money, make the fee record, and enrol the student from the
- * desk. When the student already has a Neram account (e.g. a child set up in Nexus),
- * staff pick it and the demo's parent/lead account is folded into it.
+ * Confirm a recorded payment that was entered on the enrolment link but never
+ * finalised: the money staff entered is shown, not asked for again. Confirming
+ * records it, makes the fee record and enrols the student on the day they joined
+ * (the paid date), so a backfilled student keeps their real date. The amounts can
+ * still be corrected. When the student already has a Neram account (e.g. a child
+ * set up in Nexus), staff pick it and the demo's parent/lead account is folded in.
  */
 export default function FinaliseEnrolmentDialog({
   open,
@@ -50,6 +57,8 @@ export default function FinaliseEnrolmentDialog({
   const [total, setTotal] = useState('');
   const [paid, setPaid] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [joinedOn, setJoinedOn] = useState('');
+  const [editAmounts, setEditAmounts] = useState(false);
   const [linkExisting, setLinkExisting] = useState(false);
   const [student, setStudent] = useState<DemoPerson | null>(null);
   const [query, setQuery] = useState('');
@@ -65,6 +74,8 @@ export default function FinaliseEnrolmentDialog({
     setTotal(String(Number(link.final_fee) || 0));
     setPaid(String(Number(link.amount_paid) || 0));
     setDueDate(link.installment_2_due_date || '');
+    setJoinedOn(link.payment_date && link.payment_date <= istToday() ? link.payment_date.slice(0, 10) : istToday());
+    setEditAmounts(false);
     setError(null);
     setTouched(false);
     setSaving(false);
@@ -96,7 +107,7 @@ export default function FinaliseEnrolmentDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, link.final_fee, link.amount_paid, link.installment_2_due_date, request.phone, request.user_id]);
+  }, [open, link.final_fee, link.amount_paid, link.installment_2_due_date, link.payment_date, request.phone, request.user_id]);
 
   // Search People as staff type (debounced), only while the toggle is on.
   useEffect(() => {
@@ -129,9 +140,11 @@ export default function FinaliseEnrolmentDialog({
     if (totalNum <= 0) return 'Enter the total fee.';
     if (paidNum <= 0) return 'Enter the amount paid.';
     if (paidNum > totalNum + 0.01) return 'The amount paid cannot be more than the total fee.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(joinedOn)) return 'Pick the day they paid and joined.';
+    if (joinedOn > istToday()) return 'The joining day cannot be in the future.';
     if (linkExisting && !student) return 'Pick the student account, or turn off the toggle.';
     return null;
-  }, [totalNum, paidNum, linkExisting, student]);
+  }, [totalNum, paidNum, joinedOn, linkExisting, student]);
 
   const submit = async () => {
     setTouched(true);
@@ -144,9 +157,10 @@ export default function FinaliseEnrolmentDialog({
     const err = await onSubmit({
       action: 'finalise_enrolment',
       linkId: link.id,
-      totalFee: totalNum,
-      amountPaid: paidNum,
+      // Unchanged amounts are left to the link, so the server keeps what staff entered.
+      ...(editAmounts ? { totalFee: totalNum, amountPaid: paidNum } : {}),
       installment2DueDate: partPaid && dueDate ? dueDate : null,
+      joinedOn,
       mode: linkExisting ? 'fold_parent' : 'create',
       studentUserId: linkExisting ? student?.id : undefined,
     });
@@ -158,44 +172,86 @@ export default function FinaliseEnrolmentDialog({
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="finalise-title">
       <DialogTitle id="finalise-title" sx={{ fontWeight: 700 }}>
-        Finalise enrolment
+        Confirm and enrol {request.name}
       </DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {request.name}: {linkMoneyLine(link)}. Recording this enrols the student and stops the desk from asking for the form again.
+          The fee below was already entered on the enrolment link. Confirming records it, enrols the student, and stops the desk from asking for
+          the form again. Next you can create their class login in one click.
         </Typography>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-          <TextField
-            label="Total fee"
-            type="number"
-            value={total}
-            onChange={(e) => setTotal(e.target.value)}
-            onBlur={() => setTouched(true)}
-            required
-            fullWidth
-            InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment>, sx: { minHeight: 48 } }}
-            inputProps={{ min: 0, inputMode: 'numeric' }}
-          />
-          <TextField
-            label="Amount paid now"
-            type="number"
-            value={paid}
-            onChange={(e) => setPaid(e.target.value)}
-            onBlur={() => setTouched(true)}
-            required
-            fullWidth
-            InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment>, sx: { minHeight: 48 } }}
-            inputProps={{ min: 0, inputMode: 'numeric' }}
-          />
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: 2,
+            border: 1,
+            borderColor: 'divider',
+            bgcolor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant="caption" color="text.secondary" component="p">
+              Fee on the link
+            </Typography>
+            <Typography variant="body1" fontWeight={700}>
+              {editAmounts
+                ? partPaid
+                  ? `${formatRupees(paidNum)} of ${formatRupees(totalNum)} paid, ${formatRupees(balance)} due`
+                  : `${formatRupees(paidNum)} paid in full`
+                : linkMoneyLine(link)}
+            </Typography>
+          </Box>
+          {!editAmounts && (
+            <Button onClick={() => setEditAmounts(true)} sx={{ minHeight: 44, textTransform: 'none' }}>
+              Amounts wrong? Change them
+            </Button>
+          )}
         </Box>
 
-        <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="body2" color={partPaid ? 'warning.dark' : 'success.dark'} fontWeight={700}>
-            {partPaid ? `Balance ${formatRupees(balance)} due` : 'Paid in full'}
-          </Typography>
-          {partPaid && <Typography variant="caption" color="text.secondary">(recorded as installment 1 of 2)</Typography>}
-        </Box>
+        {editAmounts && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mt: 2 }}>
+            <TextField
+              label="Total fee"
+              type="number"
+              value={total}
+              onChange={(e) => setTotal(e.target.value)}
+              onBlur={() => setTouched(true)}
+              required
+              fullWidth
+              InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment>, sx: { minHeight: 48 } }}
+              inputProps={{ min: 0, inputMode: 'numeric' }}
+            />
+            <TextField
+              label="Amount paid"
+              type="number"
+              value={paid}
+              onChange={(e) => setPaid(e.target.value)}
+              onBlur={() => setTouched(true)}
+              required
+              fullWidth
+              InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment>, sx: { minHeight: 48 } }}
+              inputProps={{ min: 0, inputMode: 'numeric' }}
+            />
+          </Box>
+        )}
+
+        <TextField
+          label="Paid and joined on"
+          type="date"
+          value={joinedOn}
+          onChange={(e) => setJoinedOn(e.target.value)}
+          required
+          fullWidth
+          sx={{ mt: 2 }}
+          InputLabelProps={{ shrink: true }}
+          inputProps={{ max: istToday() }}
+          InputProps={{ sx: { minHeight: 48 } }}
+          helperText="The Enrolled date on the desk and in People. For a student who paid earlier, pick the day they actually paid."
+        />
 
         {partPaid && (
           <TextField
@@ -293,7 +349,7 @@ export default function FinaliseEnrolmentDialog({
           disabled={saving || !!fieldError}
           sx={{ minHeight: 44 }}
         >
-          {saving ? 'Finalising' : 'Finalise enrolment'}
+          {saving ? 'Enrolling' : 'Confirm and enrol'}
         </Button>
       </DialogActions>
     </Dialog>

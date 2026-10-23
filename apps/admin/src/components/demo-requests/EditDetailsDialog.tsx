@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -16,7 +16,9 @@ import {
   TextField,
   Typography,
 } from '@neram/ui';
+import { storedMobile } from '@neram/database/phone';
 import type { DemoRequest } from './types';
+import MobileField from './MobileField';
 
 const CLASS_OPTIONS: Array<{ id: string; label: string }> = [
   { id: '10th', label: 'Class 10' },
@@ -31,7 +33,7 @@ function examYears(): number[] {
   return [y, y + 1, y + 2, y + 3, y + 4];
 }
 
-interface Form {
+export interface Form {
   name: string;
   phone: string;
   email: string;
@@ -44,19 +46,34 @@ interface Form {
   accountHolder: 'student' | 'parent';
 }
 
-function fromRequest(r: DemoRequest): Form {
+export function fromRequest(r: DemoRequest): Form {
   return {
     name: r.name ?? '',
-    phone: (r.phone ?? '').replace(/\D/g, '').slice(-10),
+    // Kept with its code, so a Gulf number stays Gulf.
+    phone: r.phone ?? '',
     email: r.email ?? '',
     currentClass: r.current_class ?? '',
     examYear: r.exam_year ? String(r.exam_year) : '',
     parentName: r.parent_name ?? '',
-    parentPhone: (r.parent_phone ?? '').replace(/\D/g, '').slice(-10),
+    parentPhone: r.parent_phone ?? '',
     parentEmail: r.parent_email ?? '',
     parentJoining: !!r.parent_joining,
     accountHolder: r.account_holder === 'parent' ? 'parent' : 'student',
   };
+}
+
+/**
+ * Same details once trimmed: a stray space typed and deleted is not a change, and
+ * a mobile number counts by the number it stores, not how the picker formats it.
+ */
+export function sameForm(a: Form, b: Form): boolean {
+  return (Object.keys(a) as Array<keyof Form>).every((k) => {
+    const x = a[k];
+    const y = b[k];
+    if (typeof x !== 'string' || typeof y !== 'string') return x === y;
+    if (k === 'phone' || k === 'parentPhone') return (storedMobile(x) ?? x.trim()) === (storedMobile(y) ?? y.trim());
+    return x.trim() === y.trim();
+  });
 }
 
 /**
@@ -87,10 +104,13 @@ export default function EditDetailsDialog({
 
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }));
   const nameOk = form.name.trim().length >= 2;
-  const phoneOk = /^[6-9]\d{9}$/.test(form.phone);
+  const phoneOk = !!storedMobile(form.phone);
+  const parentPhoneOk = !form.parentPhone || !!storedMobile(form.parentPhone);
   const emailOk = !form.email.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim());
   const parentEmailOk = !form.parentEmail.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.parentEmail.trim());
-  const canSave = nameOk && phoneOk && emailOk && parentEmailOk;
+  const canSave = nameOk && phoneOk && parentPhoneOk && emailOk && parentEmailOk;
+  // Nothing changed means nothing to save, so an untouched form never writes a log entry.
+  const dirty = useMemo(() => !sameForm(form, fromRequest(request)), [form, request]);
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="edit-details-title">
@@ -110,13 +130,12 @@ export default function EditDetailsDialog({
               inputProps={{ maxLength: 120 }}
               required
             />
-            <TextField
-              label="Phone (10 digits)"
+            <MobileField
+              label="Mobile"
               value={form.phone}
-              onChange={(e) => set({ phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+              onChange={(phone) => set({ phone })}
               error={!!form.phone && !phoneOk}
-              helperText={form.phone && !phoneOk ? 'Enter a 10-digit Indian mobile' : ' '}
-              inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+              helperText={form.phone && !phoneOk ? 'A full mobile number for the picked country' : ' '}
               required
             />
             <TextField
@@ -154,11 +173,12 @@ export default function EditDetailsDialog({
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField label="Parent name (optional)" value={form.parentName} onChange={(e) => set({ parentName: e.target.value })} inputProps={{ maxLength: 120 }} />
-            <TextField
-              label="Parent phone (optional)"
+            <MobileField
+              label="Parent mobile (optional)"
               value={form.parentPhone}
-              onChange={(e) => set({ parentPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-              inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+              onChange={(parentPhone) => set({ parentPhone })}
+              error={!parentPhoneOk}
+              helperText={parentPhoneOk ? ' ' : 'A full mobile number, or leave it blank'}
             />
             <TextField
               label="Parent email (optional)"
@@ -187,7 +207,7 @@ export default function EditDetailsDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !canSave}
+          disabled={busy || !canSave || !dirty}
           startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined}
           sx={{ minHeight: 44 }}
           onClick={() =>

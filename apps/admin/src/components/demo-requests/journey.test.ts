@@ -71,6 +71,24 @@ describe('stageOf', () => {
     expect(stageOf(req({ status: 'rejected' }), null, undefined)).toBe('closed');
     expect(stageOf(req({ status: 'cancelled' }), null, undefined)).toBe('closed');
   });
+  it('Try later waits on the Later tab, then comes back to To call on its date', () => {
+    const parked = req({ status: 'contacted', last_call_outcome: 'later', next_contact_at: '2026-11-23T04:30:00Z' });
+    expect(stageOf(parked, null, undefined, new Date('2026-10-23T09:30:00Z'))).toBe('later');
+    expect(stageOf(parked, null, undefined, new Date('2026-11-23T05:00:00Z'))).toBe('to_call');
+    // An ordinary call-back is still To call.
+    expect(stageOf(req({ status: 'contacted', last_call_outcome: 'call_back', next_contact_at: '2026-11-23T04:30:00Z' }), null, undefined, new Date('2026-10-23T09:30:00Z'))).toBe('to_call');
+  });
+});
+
+describe('closedReason for Joined another class', () => {
+  it('names it, whether logged on a call or when cancelling', () => {
+    expect(closedReason(req({ status: 'rejected', last_call_outcome: 'joined_elsewhere', rejection_reason: 'Offline centre in Kerala' }), null)).toBe(
+      'Joined another class: Offline centre in Kerala',
+    );
+    expect(closedReason(req({ status: 'cancelled', last_call_outcome: 'joined_elsewhere', cancel_reason: 'Joined XYZ' }), null)).toBe(
+      'Joined another class: Joined XYZ',
+    );
+  });
 });
 
 describe('linkIsReallyPaid / linkIsUnfinalisedRecorded', () => {

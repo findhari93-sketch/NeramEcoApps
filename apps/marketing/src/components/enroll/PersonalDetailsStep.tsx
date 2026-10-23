@@ -18,12 +18,16 @@ import {
   Button,
   CircularProgress,
   MenuItem,
+  Menu,
   Select,
   InputLabel,
 } from '@neram/ui';
-import { CheckCircleOutlined, VerifiedOutlined } from '@mui/icons-material';
+import ButtonBase from '@mui/material/ButtonBase';
+import { CheckCircleOutlined, VerifiedOutlined, ExpandMore } from '@mui/icons-material';
 import { GENDER_OPTIONS } from '@/components/apply/types';
 import type { PersonalInfoData, LocationData } from '@/components/apply/types';
+import { SUPPORTED_COUNTRIES, getCountryConfig } from '@/components/apply/countryConfig';
+import { splitEnrolPhone, joinEnrolPhone } from './enrolPhone';
 
 interface PersonalDetailsStepProps {
   personal: PersonalInfoData;
@@ -54,6 +58,12 @@ export default function PersonalDetailsStep({
   onVerifyPhone,
 }: PersonalDetailsStepProps) {
   const [isPincodeLooking, setIsPincodeLooking] = useState(false);
+
+  // Mobile: India or a Gulf country. A new code is a new number, so it clears the digits.
+  const [countryAnchor, setCountryAnchor] = useState<HTMLElement | null>(null);
+  const phoneParts = splitEnrolPhone(personal.phone, personal.phoneCountry);
+  const phoneConfig = getCountryConfig(phoneParts.phoneCountry);
+  const phoneIncomplete = !!phoneParts.phone && !phoneConfig.phonePattern.test(phoneParts.phone);
 
   // Auto-lookup pincode
   const handlePincodeChange = useCallback(async (pincode: string) => {
@@ -121,11 +131,61 @@ export default function PersonalDetailsStep({
         <Grid item xs={12} sm={6}>
           <TextField
             label="Phone Number"
+            type="tel"
             fullWidth
-            value={personal.phone}
-            onChange={(e) => updatePersonal({ phone: e.target.value })}
+            value={phoneParts.phone}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, phoneConfig.phoneLength);
+              updatePersonal({ phone: joinEnrolPhone(digits, phoneConfig.code), phoneCountry: phoneConfig.code });
+            }}
+            error={phoneIncomplete}
+            helperText={phoneIncomplete ? `Enter the ${phoneConfig.phoneLength}-digit ${phoneConfig.name} mobile number` : 'India or a Gulf number. Tap the code to change it.'}
             size="medium"
+            inputProps={{ inputMode: 'numeric', autoComplete: 'tel-national', maxLength: phoneConfig.phoneLength }}
             InputProps={{
+              startAdornment: (
+                <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                  <ButtonBase
+                    onClick={(e) => setCountryAnchor(e.currentTarget)}
+                    aria-haspopup="menu"
+                    aria-label={`Country code ${phoneConfig.phonePrefix}, ${phoneConfig.name}. Change`}
+                    sx={{
+                      minWidth: 64,
+                      minHeight: 48,
+                      px: 1,
+                      ml: -1,
+                      gap: 0.25,
+                      borderRadius: 1,
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: 'text.primary',
+                      '&:hover': { bgcolor: 'action.hover' },
+                      '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main' },
+                    }}
+                  >
+                    {phoneConfig.phonePrefix}
+                    <ExpandMore aria-hidden sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  </ButtonBase>
+                  <Menu anchorEl={countryAnchor} open={!!countryAnchor} onClose={() => setCountryAnchor(null)}>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <MenuItem
+                        key={c.code}
+                        selected={c.code === phoneConfig.code}
+                        onClick={() => {
+                          setCountryAnchor(null);
+                          if (c.code !== phoneConfig.code) updatePersonal({ phone: '', phoneCountry: c.code });
+                        }}
+                        sx={{ minHeight: 48, gap: 1.5 }}
+                      >
+                        <Box component="span" sx={{ fontWeight: 700, minWidth: 48 }}>
+                          {c.phonePrefix}
+                        </Box>
+                        {c.name}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </InputAdornment>
+              ),
               endAdornment: (
                 <InputAdornment position="end">
                   {phoneVerified ? (
@@ -141,7 +201,7 @@ export default function PersonalDetailsStep({
                       size="small"
                       variant="outlined"
                       onClick={onVerifyPhone}
-                      sx={{ borderRadius: 1, textTransform: 'none' }}
+                      sx={{ borderRadius: 1, textTransform: 'none', minHeight: 44 }}
                     >
                       Verify
                     </Button>

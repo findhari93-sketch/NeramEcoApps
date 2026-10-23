@@ -44,6 +44,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { OpsSkeleton as Skeleton } from '@/components/ops/OpsUi';
 
 type StepKey = 'account' | 'licence' | 'link' | 'classroom' | 'teams' | 'welcome';
@@ -66,14 +67,21 @@ interface View {
   whatsapp: { message: string; url: string } | null;
   guide: { count: number; total: number } | null;
   batchGroup: { url: string; source: string; batchLabel: string | null } | null;
+  existing: { upn: string | null } | null;
+  teamsName: { givenName: string; surname: string | null; displayName: string };
+  signedInAt: string | null;
+  groupChatUrl: string | null;
 }
+
+const shortDate = (value: string) =>
+  new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
 const STEP_LABELS: Record<StepKey, string> = {
   account: 'Microsoft account',
   licence: 'Student licence',
   link: 'Linked to the Neram record',
   classroom: 'Year classroom',
-  teams: 'Class Team',
+  teams: 'Class Team and group chat',
   welcome: 'Welcome email',
 };
 const STEP_ORDER: StepKey[] = ['account', 'licence', 'link', 'classroom', 'teams', 'welcome'];
@@ -85,6 +93,7 @@ function StepIcon({ status }: { status: Step['status'] }) {
   return <RadioButtonUncheckedIcon color="disabled" fontSize="small" aria-label="Not done yet" />;
 }
 
+type Busy = 'create' | 'adopt' | 'resend' | 'reset' | 'name';
 type Availability = { state: 'idle' | 'checking' | 'free' | 'taken' | 'invalid' | 'error'; alternative?: string | null; message?: string };
 
 export default function ClassAccountCard({ userId, adminId }: { userId: string; adminId?: string | null }) {
@@ -95,11 +104,14 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [availability, setAvailability] = useState<Availability>({ state: 'idle' });
-  const [busy, setBusy] = useState<'create' | 'resend' | 'reset' | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [onceShown, setOnceShown] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  // Making a Microsoft account (or adopting one) is costly and sends email: always confirmed first.
+  const [confirm, setConfirm] = useState<'create' | 'adopt' | null>(null);
+  const [showSteps, setShowSteps] = useState(false);
   const checkSeq = useRef(0);
 
   const load = useCallback(async () => {
@@ -124,7 +136,7 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
 
   // Is the typed login ID free? Debounced, and only before the account exists.
   useEffect(() => {
-    if (!view || view.setup?.steps.account.status === 'done' || !username.trim()) {
+    if (!view || view.setup?.steps.account.status === 'done' || view.existing || !username.trim()) {
       setAvailability({ state: 'idle' });
       return;
     }
@@ -145,7 +157,7 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
     return () => clearTimeout(timer);
   }, [username, userId, view]);
 
-  const post = async (path: string, body: Record<string, unknown>, kind: 'create' | 'resend' | 'reset') => {
+  const post = async (path: string, body: Record<string, unknown>, kind: Busy) => {
     setBusy(kind);
     setError(null);
     setNotice(null);
@@ -195,14 +207,83 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
       <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1 }}>
         Class account
       </Typography>
-      {accountDone && view.guide && (
-        <Chip
-          size="small"
-          color={view.guide.count === view.guide.total ? 'success' : 'default'}
-          label={view.guide.count === 0 ? 'Setup guide: not started' : `Setup guide: ${view.guide.count} of ${view.guide.total} done`}
-        />
+      {view.signedInAt ? (
+        <Chip size="small" color="success" icon={<CheckCircleIcon />} label={`Active, first signed in ${shortDate(view.signedInAt)}`} />
+      ) : (
+        accountDone &&
+        view.guide && (
+          <Chip
+            size="small"
+            color={view.guide.count === view.guide.total ? 'success' : 'default'}
+            label={view.guide.count === 0 ? 'Setup guide: not started' : `Setup guide: ${view.guide.count} of ${view.guide.total} done`}
+          />
+        )
       )}
     </Box>
+  );
+
+  const confirmUpn = view.existing?.upn || `${username.trim()}@${view.suggestion.domain}`;
+  const confirmDialog = (
+    <Dialog
+      open={confirm !== null}
+      onClose={busy ? undefined : () => setConfirm(null)}
+      maxWidth="xs"
+      fullWidth
+      aria-labelledby={`ca-${userId}-confirm`}
+    >
+      <DialogTitle id={`ca-${userId}-confirm`} sx={{ fontWeight: 700 }}>
+        {confirm === 'adopt' ? `Use ${first}'s existing account?` : `Create ${first}'s class login?`}
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-all', mb: 1 }}>
+          {confirmUpn}
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: 0.5, typography: 'body2', color: 'text.secondary' }}>
+          {confirm === 'adopt' ? (
+            <>
+              <li>Keeps this Microsoft account. No new account is made.</li>
+              <li>Makes sure it has a student licence.</li>
+              <li>Adds {first} to the year classroom, its Team and the group chat.</li>
+              <li>No welcome email, since {first} already uses this account.</li>
+            </>
+          ) : (
+            <>
+              <li>Creates a real Microsoft account and uses a paid student licence.</li>
+              <li>Adds {first} to the year classroom, its Team and the group chat.</li>
+              <li>
+                {view.student.personalEmail
+                  ? `Emails the login ID and setup link to ${view.student.personalEmail}.`
+                  : 'No personal email on file, so copy the WhatsApp message afterwards.'}
+              </li>
+              <li>Teams shows the name {view.teamsName.displayName}.</li>
+            </>
+          )}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button onClick={() => setConfirm(null)} disabled={busy !== null} sx={{ minHeight: 44, textTransform: 'none' }}>
+          Go back
+        </Button>
+        <Button
+          variant="contained"
+          onClick={async () => {
+            const kind = confirm;
+            const ok = await post(
+              `/api/students/${userId}/class-account`,
+              kind === 'adopt' ? { adopt: true } : { username: username.trim() },
+              kind === 'adopt' ? 'adopt' : 'create',
+            );
+            setConfirm(null);
+            if (ok) setNotice(kind === 'adopt' ? `Now tracked here. ${first} keeps the same login.` : `Class login created for ${first}.`);
+          }}
+          disabled={busy !== null}
+          startIcon={busy === 'create' || busy === 'adopt' ? <CircularProgress size={16} color="inherit" /> : <BadgeOutlinedIcon />}
+          sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+        >
+          {busy === 'create' ? 'Creating, about 20 seconds' : busy === 'adopt' ? 'Setting up' : confirm === 'adopt' ? 'Use this account' : 'Create login and email it'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 
   const batchNote = !view.batchGroup ? (
@@ -215,6 +296,53 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
       <a href="/exam-batches">Exam Batches</a>.
     </Alert>
   ) : null;
+
+  // ── Already has a Microsoft account, made outside this card ─────────────────
+  if (!accountDone && view.existing) {
+    return (
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        {header}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+          <Typography variant="body1" fontWeight={700} sx={{ wordBreak: 'break-all' }}>
+            {view.existing.upn || 'A Microsoft account'}
+          </Typography>
+          {view.existing.upn && (
+            <Tooltip title={copied ? 'Copied' : 'Copy login ID'}>
+              <IconButton onClick={() => copy(view.existing!.upn!)} aria-label="Copy login ID" sx={{ width: 44, height: 44 }}>
+                {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {first} already has a class account (made in Nexus or by hand), so there is nothing to create. Use it here to check the licence,
+          classroom, Team and group chat. No email is sent.
+        </Typography>
+        {error && (
+          <Alert severity="error" role="alert" sx={{ mt: 1.5 }}>
+            {error}
+          </Alert>
+        )}
+        {notice && (
+          <Alert severity="success" role="status" sx={{ mt: 1.5 }} onClose={() => setNotice(null)}>
+            {notice}
+          </Alert>
+        )}
+        <Box sx={{ mt: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setConfirm('adopt')}
+            disabled={busy !== null}
+            startIcon={<BadgeOutlinedIcon />}
+            sx={{ minHeight: 44, fontWeight: 700, textTransform: 'none' }}
+          >
+            Use the existing account
+          </Button>
+        </Box>
+        {confirmDialog}
+      </Paper>
+    );
+  }
 
   // ── Not set up yet ──────────────────────────────────────────────────────────
   if (!accountDone) {
@@ -276,15 +404,16 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
         <Box sx={{ mt: 2 }}>
           <Button
             variant="contained"
-            onClick={() => post(`/api/students/${userId}/class-account`, { username: username.trim() }, 'create')}
+            onClick={() => setConfirm('create')}
             disabled={busy !== null || !username.trim() || !canCreate}
             startIcon={busy === 'create' ? <CircularProgress size={16} color="inherit" /> : <BadgeOutlinedIcon />}
             sx={{ minHeight: 44, fontWeight: 700, textTransform: 'none' }}
           >
-            {busy === 'create' ? 'Setting up, about 20 seconds' : 'Set up class account'}
+            {busy === 'create' ? 'Creating, about 20 seconds' : 'Create login and email it'}
           </Button>
         </Box>
         {batchNote}
+        {confirmDialog}
       </Paper>
     );
   }
@@ -312,6 +441,24 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
             ? `Start password ${view.suggestion.startPassword} still works until ${first} signs in and changes it.`
             : `${first} has not signed in yet.`}
       </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+        <Typography variant="body2" color="text.secondary">
+          Name in Teams: <strong>{view.teamsName.displayName}</strong>
+          {!view.teamsName.surname && ' (no surname on file)'}
+        </Typography>
+        <Button
+          size="small"
+          onClick={async () => {
+            const ok = await post(`/api/students/${userId}/class-account`, { syncName: true }, 'name');
+            if (ok) setNotice(`Teams now shows ${ok.name || view.teamsName.displayName}. It can take a few minutes to appear.`);
+          }}
+          disabled={busy !== null}
+          startIcon={busy === 'name' ? <CircularProgress size={14} color="inherit" /> : undefined}
+          sx={{ minHeight: 36, textTransform: 'none' }}
+        >
+          Update name in Teams
+        </Button>
+      </Box>
 
       {onceShown && (
         <Alert severity="warning" sx={{ mt: 1.5 }} onClose={() => setOnceShown(null)}>
@@ -323,7 +470,21 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
         </Alert>
       )}
 
-      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, display: 'grid', gap: 0.75 }}>
+      {/* Once the student is signed in, the setup checklist is history: folded away. */}
+      {view.signedInAt && (
+        <Button
+          size="small"
+          onClick={() => setShowSteps((s) => !s)}
+          aria-expanded={showSteps}
+          sx={{ mt: 1, minHeight: 36, textTransform: 'none', px: 0 }}
+        >
+          {showSteps ? 'Hide setup steps' : failed.length ? `Show setup steps (${failed.length} to retry)` : 'Show setup steps'}
+        </Button>
+      )}
+      <Box
+        component="ul"
+        sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, display: view.signedInAt && !showSteps ? 'none' : 'grid', gap: 0.75 }}
+      >
         {STEP_ORDER.map((key) => {
           const step = setup!.steps[key];
           return (
@@ -413,6 +574,20 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
         <Button onClick={() => setResetOpen(true)} disabled={busy !== null} startIcon={<LockResetIcon />} sx={{ minHeight: 44, textTransform: 'none' }}>
           Reset password
         </Button>
+        {view.groupChatUrl && (
+          <Tooltip title="Opens the student group chat in Teams, where you can add someone by hand">
+            <Button
+              component="a"
+              href={view.groupChatUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              startIcon={<GroupsOutlinedIcon />}
+              sx={{ minHeight: 44, textTransform: 'none' }}
+            >
+              Open group chat
+            </Button>
+          </Tooltip>
+        )}
       </Box>
       {batchNote}
 

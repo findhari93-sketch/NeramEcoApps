@@ -25,6 +25,7 @@ import {
   readAppRoles,
   readLicenseStates,
   resetEntraPassword,
+  setEntraName,
 } from './entra';
 
 const fetchMock = vi.fn();
@@ -148,6 +149,21 @@ describe('assignLicense and addUserToGroup', () => {
     fetchMock.mockResolvedValueOnce(reply(400, { error: { message: 'One or more added object references already exist' } }));
     await expect(addUserToGroup('group-1', 'oid-1', { waitMs: 0 })).resolves.toEqual({ ok: true, value: undefined });
     expect(String(fetchMock.mock.calls[0][0])).toContain('/groups/group-1/members/$ref');
+  });
+});
+
+describe('setEntraName', () => {
+  it('sends first and last name as the display name', async () => {
+    fetchMock.mockResolvedValueOnce(reply(204));
+    await expect(setEntraName('oid-1', { givenName: 'Radhika', surname: 'Kunisetty' })).resolves.toEqual({ ok: true, value: undefined });
+    expect(fetchMock.mock.calls[0][1].method).toBe('PATCH');
+    expect(sentBody()).toEqual({ displayName: 'Radhika Kunisetty', givenName: 'Radhika', surname: 'Kunisetty' });
+  });
+
+  it('keeps the first name alone when no surname is known', async () => {
+    fetchMock.mockResolvedValueOnce(reply(204));
+    await setEntraName('oid-1', { givenName: 'Radhika', surname: null });
+    expect(sentBody()).toEqual({ displayName: 'Radhika', givenName: 'Radhika', surname: null });
   });
 });
 

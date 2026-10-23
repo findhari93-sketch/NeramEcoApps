@@ -13,7 +13,6 @@
 import { createStudentProfile, updateUser } from '../queries/users';
 import { updateDirectEnrollmentLink } from '../queries/direct-enrollment';
 import { incrementBatchEnrollment } from '../queries/courses';
-import { initializeStudentOnboarding } from '../queries/post-enrollment-onboarding';
 import { enrollUserInDefaultClassroom } from '../queries/nexus/classrooms';
 import { addUserPhoneContact } from '../queries/user-contacts';
 import { resolveDuplicatesFor } from '../queries/duplicates';
@@ -25,6 +24,7 @@ import { istToday, istDateOf, isOfficePaymentMethod } from '../utils/fee-plan';
 import { defaultBalanceDueDate } from '../utils/enrolment-link';
 import { buildLeadProfileUpdate } from '../utils/enrol-lead-update';
 import { normalisePhoneE164 } from '../utils/phone';
+import { fullestName, surnameFrom } from '../utils/person-name';
 
 /** The application answers the student typed on the link. */
 export interface DirectEnrolmentForm {
@@ -87,15 +87,24 @@ export async function finaliseDirectEnrolment(
   const { link, userId, form } = input;
   const pay = input.payment || {};
 
-  const { data: existingUser } = await supabase.from('users').select('id, user_type, phone').eq('id', userId).single();
+  const { data: existingUser } = await supabase.from('users').select('id, user_type, phone, name, last_name').eq('id', userId).single();
   if (existingUser?.user_type === 'student') {
     return { ok: false, status: 400, error: 'You are already enrolled as a student' };
   }
 
-  // 1. The user becomes a student.
+  // They joined when they paid: a payment made outside and entered later keeps its real date.
+  const today = istToday();
+  const finalPaymentDate = pay.date || link.payment_date || new Date().toISOString();
+  const paidOnRaw = istDateOf(String(finalPaymentDate).length === 10 ? `${finalPaymentDate}T12:00:00+05:30` : finalPaymentDate) || today;
+  const paidOn = paidOnRaw > today ? today : paidOnRaw;
+  const joinedAt = paidOn === today ? new Date().toISOString() : `${paidOn}T12:00:00+05:30`;
+
+  // 1. The user becomes a student. The form asks for the first name only, so the
+  // full name already on the record or the link is kept (Teams shows it).
+  const nameSources = [existingUser?.name, link.student_name];
   const userUpdate: Record<string, unknown> = {
     first_name: form.firstName,
-    name: form.firstName,
+    name: fullestName(form.firstName, nameSources),
     user_type: 'student',
     status: 'active',
     phone_verified: true,
@@ -103,6 +112,8 @@ export async function finaliseDirectEnrolment(
     date_of_birth: form.dateOfBirth || null,
     gender: form.gender || null,
   };
+  const surname = existingUser?.last_name ? null : surnameFrom(form.firstName, nameSources);
+  if (surname) userUpdate.last_name = surname;
   // Google sign-ins have users.phone NULL; the Entra reconciler matches on it,
   // so an empty phone here becomes a duplicate student later (Chetana, 2026-07-28).
   if (!existingUser?.phone) {
@@ -118,7 +129,7 @@ export async function finaliseDirectEnrolment(
     studentProfile = await createStudentProfile(
       {
         user_id: userId,
-        enrollment_date: new Date().toISOString().split('T')[0],
+        enrollment_date: paidOn,
         batch_id: link.batch_id || null,
         course_id: link.course_id || null,
         ms_teams_id: null,
@@ -212,12 +223,8 @@ export async function finaliseDirectEnrolment(
   }
 
   // 4. Money, through the office fee writer so Collections and reminders see it.
-  const finalPaymentDate = pay.date || link.payment_date || new Date().toISOString();
   const finalFee = Number(link.final_fee) || 0;
   const amountPaid = Number(link.amount_paid) || 0;
-  const today = istToday();
-  const paidOnRaw = istDateOf(String(finalPaymentDate).length === 10 ? `${finalPaymentDate}T12:00:00+05:30` : finalPaymentDate) || today;
-  const paidOn = paidOnRaw > today ? today : paidOnRaw;
   const scheme =
     link.payment_scheme === 'installment' || (link.payment_scheme !== 'full' && finalFee - amountPaid > 0.01) ? 'installment' : 'full';
   const paymentKey = `direct-link:${link.id}`;
@@ -323,7 +330,7 @@ export async function finaliseDirectEnrolment(
   const linkUpdate: Record<string, unknown> = {
     status: 'used',
     used_by: userId,
-    used_at: new Date().toISOString(),
+    used_at: joinedAt,
     lead_profile_id: leadProfile?.id || null,
     student_profile_id: studentProfile.id,
   };
@@ -345,7 +352,7 @@ export async function finaliseDirectEnrolment(
     }
   }
 
-  // 7. Document collection later, and onboarding steps.
+  // 7. Document collection later. Onboarding is the class setup guide, made at Verify.
   await supabase.from('post_enrollment_details').insert({
     student_profile_id: studentProfile.id,
     user_id: userId,
@@ -353,12 +360,6 @@ export async function finaliseDirectEnrolment(
     caste_category: form.casteCategory || null,
     form_completed: false,
   });
-  try {
-    await initializeStudentOnboarding(studentProfile.id, userId, 'direct', supabase);
-  } catch (e) {
-    console.warn('Failed to initialize onboarding steps:', e);
-  }
-
   try {
     await notifyNewApplication({
       applicationNumber,

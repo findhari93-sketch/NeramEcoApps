@@ -14,12 +14,7 @@ import {
   toReviewTab,
   type ReviewTab,
 } from '@/lib/photo-auto-review';
-import { pushApprovedPhotoToMicrosoft, type MsPushResult } from '@/lib/photo-ms-sync';
-import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
-import { getNexusSetting } from '@neram/database';
-
-/** Mirroring an approved photo onto the student's real Microsoft identity. */
-const MS_PUSH_FEATURE = 'staff.photo-ms-push';
+import { pushApprovedPhotosToMicrosoft, type MsPushResult } from '@/lib/photo-ms-sync';
 
 /**
  * Teacher photo review queue.
@@ -349,28 +344,7 @@ export async function POST(request: NextRequest) {
     const approvedIds = persisted
       .filter((o) => o.decision === 'approved')
       .map((o) => o.studentId);
-    let microsoft: MsPushResult[] = [];
-    if (approvedIds.length > 0) {
-      const setting = await getNexusSetting(FEATURE_FLAGS_KEY).catch(() => null);
-      const flags: FlagMap = resolveFlags((setting?.value as FlagMap) || {});
-      if (flags[MS_PUSH_FEATURE] === true) {
-        microsoft = await Promise.all(
-          approvedIds.map((id) =>
-            pushApprovedPhotoToMicrosoft(id).catch((e) => ({
-              userId: id,
-              status: 'failed' as const,
-              message: e instanceof Error ? e.message : 'Could not reach Microsoft.',
-            })),
-          ),
-        );
-      } else {
-        microsoft = approvedIds.map((id) => ({
-          userId: id,
-          status: 'disabled' as const,
-          message: 'Copying photos to Microsoft is switched off.',
-        }));
-      }
-    }
+    const microsoft: MsPushResult[] = await pushApprovedPhotosToMicrosoft(approvedIds);
 
     // Every count here is what the database now holds, not what the request
     // asked for. A teacher told "Approved 12" over three writes that never

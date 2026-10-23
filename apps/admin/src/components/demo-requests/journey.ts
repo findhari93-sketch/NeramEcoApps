@@ -5,16 +5,19 @@
  */
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 
+import { isParkedLater } from '@/lib/demo/try-later';
+
 export { meetingKindOf, MEETING_LABELS } from '@/lib/demo/meeting';
 
-export type DeskStage = 'to_call' | 'scheduled' | 'after_demo' | 'joined' | 'closed';
+export type DeskStage = 'to_call' | 'scheduled' | 'after_demo' | 'joined' | 'later' | 'closed';
 
 export const DESK_STAGES: Array<{ id: DeskStage; label: string; hint: string }> = [
   { id: 'to_call', label: 'To call', hint: 'Not called yet, or called with no time fixed' },
   { id: 'scheduled', label: 'Scheduled', hint: 'Demo time fixed' },
   { id: 'after_demo', label: 'After demo', hint: 'Follow up until they join or say no' },
   { id: 'joined', label: 'Enrolled', hint: 'Paid the fee after the demo' },
-  { id: 'closed', label: 'Closed', hint: 'Not interested, cancelled, or follow-up stopped' },
+  { id: 'later', label: 'Later', hint: 'Asked us to wait. Back in To call on the try-again date' },
+  { id: 'closed', label: 'Closed', hint: 'Not interested, joined another class, cancelled, or follow-up stopped' },
 ];
 
 const OPEN_FOLLOW_UP = new Set(['pending', 'scheduled', 'attempted']);
@@ -139,15 +142,19 @@ export function saysJoinedNoFee(
  * Teams meeting is Attended (After demo), never Enrolled.
  */
 export function stageOf(
-  r: Pick<DemoRequest, 'status'>,
+  r: Pick<DemoRequest, 'status'> & Partial<Pick<DemoRequest, 'last_call_outcome' | 'next_contact_at'>>,
   followUp: Pick<DemoFollowUpRow, 'status' | 'call_outcome'> | null | undefined,
   enrolment: DemoEnrolment | null | undefined,
+  now: Date = new Date(),
 ): DeskStage {
   if (enrolment?.kind === 'enrolled') return 'joined';
   switch (r.status) {
     case 'pending':
     case 'contacted':
-      return 'to_call';
+      // Parked by "Try later" until its date; then it is a call to make again.
+      return isParkedLater({ status: r.status, last_call_outcome: r.last_call_outcome ?? null, next_contact_at: r.next_contact_at ?? null }, now)
+        ? 'later'
+        : 'to_call';
     case 'approved':
       return 'scheduled';
     case 'attended':
@@ -209,6 +216,9 @@ export function sortPeople(
       return copy.sort((a, b) => t(c(a).next_contact_at) - t(c(b).next_contact_at) || t(c(a).created_at) - t(c(b).created_at));
     case 'scheduled':
       return copy.sort((a, b) => t(c(a).scheduled_start) - t(c(b).scheduled_start));
+    case 'later':
+      // Soonest try-again date first.
+      return copy.sort((a, b) => t(c(a).next_contact_at) - t(c(b).next_contact_at));
     case 'after_demo':
       // Not started first (needs a date), then the earliest due call.
       return copy.sort((a, b) => {
@@ -235,6 +245,10 @@ export function closedReason(r: DemoRequest, followUp: DemoFollowUpRow | null | 
   if (followUp && followUp.status === 'completed' && followUp.call_outcome !== 'joined') {
     const why = (followUp.call_notes || '').replace(/^Reason:\s*/i, '').split('. ')[0];
     return `Follow-up stopped${why ? `: ${why}` : ''}`;
+  }
+  if (r.last_call_outcome === 'joined_elsewhere') {
+    const why = r.status === 'rejected' ? r.rejection_reason : r.cancel_reason;
+    return `Joined another class${why ? `: ${why}` : ''}`;
   }
   if (r.status === 'rejected') return `Not interested${r.rejection_reason ? `: ${r.rejection_reason}` : ''}`;
   if (r.status === 'cancelled') return r.cancel_reason || 'Cancelled';

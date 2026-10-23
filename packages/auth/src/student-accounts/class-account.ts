@@ -120,6 +120,7 @@ export const CLASSROOM_FAILED_MESSAGE = 'Could not add them to their year classr
 export const TEAMS_LATER =
   'Not in the class Team yet. A brand new account can take a few minutes to reach Microsoft Teams. Retry in 5 minutes.';
 export const WELCOME_FAILED = 'The welcome email did not send. Resend it, or copy the WhatsApp message.';
+export const ALREADY_IN_USE = 'Not sent: they already use this account.';
 
 export function emptySteps(): ClassSteps {
   return {
@@ -159,6 +160,8 @@ export async function provisionClassAccount(
     actorId: string;
     /** Send the welcome email again even if it went before. */
     resendWelcome?: boolean;
+    /** False when the student already uses the account (adopting it): no welcome email. */
+    welcome?: boolean;
   },
 ): Promise<ProvisionResult> {
   const { graph, store } = ports;
@@ -308,7 +311,9 @@ export async function provisionClassAccount(
   }
 
   // 6. The welcome email: login ID and the setup link, no password.
-  if (setup.steps.link.status === 'done' && (setup.steps.welcome.status !== 'done' || input.resendWelcome)) {
+  if (input.welcome === false && setup.steps.welcome.status === 'pending' && !input.resendWelcome) {
+    await mark('welcome', { status: 'skipped', message: ALREADY_IN_USE });
+  } else if (setup.steps.link.status === 'done' && (setup.steps.welcome.status !== 'done' || input.resendWelcome)) {
     try {
       const sent = await store.sendWelcome({ student, upn: setup.upn });
       await mark(

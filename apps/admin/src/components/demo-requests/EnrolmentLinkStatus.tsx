@@ -4,6 +4,7 @@ import { Alert, Box, Button, Paper, Typography } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import LinkIcon from '@mui/icons-material/Link';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { formatDueDate, formatRupees } from '@neram/database/fee-plan';
 import { offerFromLink } from '@neram/database/student-pay';
 import VerifyPaymentCard, { type VerifyDecision } from '@/components/direct-enrollment/VerifyPaymentCard';
@@ -120,6 +121,36 @@ export default function EnrolmentLinkStatus({
 
   // Staff typed a payment onto the link but never finalised it: enrol them from the
   // desk rather than showing a share link that asks for the form a second time.
+  // A student already signed in to their class account is studying with us, so the
+  // warning goes; only a quiet way to put the fee on their record stays.
+  if (linkIsUnfinalisedRecorded(link) && link.student_signed_in_at) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {note}
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <CheckCircleOutlineIcon color="success" aria-hidden />
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography variant="body2" fontWeight={700}>
+              Studying, class account active
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {linkMoneyLine(link)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              First signed in on {shortDate(link.student_signed_in_at)}. The fee is not on their record yet.
+            </Typography>
+          </Box>
+          <Button onClick={onFinalise} disabled={disabled || !onFinalise} sx={{ minHeight: 44, textTransform: 'none' }}>
+            Record the fee
+          </Button>
+        </Paper>
+        {(link.submitted_user_id || link.user_id) && (
+          <ClassAccountCard userId={(link.submitted_user_id || link.user_id) as string} adminId={adminId} />
+        )}
+      </Box>
+    );
+  }
+
   if (linkIsUnfinalisedRecorded(link)) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -135,13 +166,14 @@ export default function EnrolmentLinkStatus({
                 {linkMoneyLine(link)}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Entered by {link.created_by_name || 'staff'} on {shortDate(link.created_at)}. Finalise to enrol them, no need to send the form again.
+                Entered by {link.created_by_name || 'staff'} on {shortDate(link.created_at)}
+                {link.payment_date ? `, paid on ${shortDate(link.payment_date)}` : ''}. Confirm to enrol them, no need to send the form again.
               </Typography>
             </Box>
           </Box>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button variant="contained" startIcon={<SchoolIcon />} onClick={onFinalise} disabled={disabled || !onFinalise} sx={{ minHeight: 44 }}>
-              Finalise enrolment
+              Confirm and enrol
             </Button>
             <Button variant="outlined" onClick={onOpen} disabled={disabled} sx={{ minHeight: 44 }}>
               View and share

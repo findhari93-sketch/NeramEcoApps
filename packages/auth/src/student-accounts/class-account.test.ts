@@ -121,6 +121,23 @@ describe('provisionClassAccount', () => {
     expect(result.kind === 'ok' && result.setup.upn).toBe('Existing@neramclasses.com');
   });
 
+  it('adopts an account the student already uses without a welcome email', async () => {
+    const { ports, graph, store } = makePorts({ student: { msOid: 'old-oid' } });
+    const result = await provisionClassAccount(ports, { userId: 'u1', actorId: 'staff', welcome: false });
+    expect(graph.createUser).not.toHaveBeenCalled();
+    expect(store.sendWelcome).not.toHaveBeenCalled();
+    expect(result.kind === 'ok' && result.setup.steps.welcome).toMatchObject({ status: 'skipped' });
+    expect(result.kind === 'ok' && result.complete).toBe(true);
+  });
+
+  it('sends Teams the first and last name', async () => {
+    const { ports, graph } = makePorts({ student: { lastName: 'Kunisetty' } });
+    await provisionClassAccount(ports, { userId: 'u1', actorId: 'staff' });
+    expect(graph.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: 'Radhika Kunisetty', givenName: 'Radhika', surname: 'Kunisetty' }),
+    );
+  });
+
   it('stops at a failed license and Retry resumes there without a second account', async () => {
     const assignLicense = vi
       .fn()

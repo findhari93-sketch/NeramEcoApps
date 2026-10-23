@@ -33,17 +33,34 @@ export interface ClassAccountView {
   whatsapp: { message: string; url: string } | null;
   guide: { count: number; total: number } | null;
   batchGroup: { url: string; source: string; batchLabel: string | null } | null;
+  /**
+   * A Microsoft account already on the record with no setup here (made in Nexus or
+   * by hand). Setting up again would make a second login, so the card adopts it.
+   */
+  existing: { upn: string | null } | null;
+  /** The name Teams should show: first and last name. */
+  teamsName: { givenName: string; surname: string | null; displayName: string };
+  /** When the student first used the account: opened Nexus or chose their own password. */
+  signedInAt: string | null;
+  /** The student group chat in Teams, for staff to add someone by hand. */
+  groupChatUrl: string | null;
 }
+
+const OWN_DOMAIN = /@(neramclasses\.com|neramclasses\.onmicrosoft\.com)$/i;
 
 export async function buildClassAccountView(supabase: any, userId: string): Promise<ClassAccountView | null> {
   const student = await readClassAccountStudent(supabase, userId);
   if (!student) return null;
-  const [{ defaults }, setup, batchGroup, signals] = await Promise.all([
+  const [{ defaults }, setup, batchGroup, signals, chat] = await Promise.all([
     readStudentAccountDefaults(supabase),
     readClassAccountSetup(supabase, userId),
     getWhatsAppGroupLinkForUser(supabase, userId).catch(() => null),
-    supabase.from('users').select('nexus_first_login_at, photo_status').eq('id', userId).maybeSingle(),
+    supabase.from('users').select('nexus_first_login_at, photo_status, linked_classroom_email, email').eq('id', userId).maybeSingle(),
+    supabase.from('app_settings').select('setting_value').eq('setting_key', 'teams_group_chat').maybeSingle(),
   ]);
+  const user = signals?.data;
+  const accountDone = setup?.steps.account.status === 'done';
+  const signedIn = [user?.nexus_first_login_at, setup?.row.password_changed_at].filter(Boolean) as string[];
 
   const username = suggestClassUsername(student);
   const view: ClassAccountView = {
@@ -60,6 +77,17 @@ export async function buildClassAccountView(supabase: any, userId: string): Prom
     whatsapp: null,
     guide: null,
     batchGroup,
+    existing:
+      student.msOid && !accountDone
+        ? { upn: user?.linked_classroom_email || (OWN_DOMAIN.test(String(user?.email || '')) ? user.email : null) }
+        : null,
+    teamsName: {
+      givenName: student.firstName,
+      surname: student.lastName,
+      displayName: [student.firstName, student.lastName].filter(Boolean).join(' '),
+    },
+    signedInAt: student.msOid && signedIn.length ? signedIn.sort()[0] : null,
+    groupChatUrl: chat?.data?.setting_value?.invite_link || null,
   };
 
   if (setup) {
@@ -79,8 +107,8 @@ export async function buildClassAccountView(supabase: any, userId: string): Prom
       const progress = guideProgress({
         ticks: setup.row.student_ticks,
         passwordChangedAt: setup.row.password_changed_at,
-        nexusFirstLoginAt: signals?.data?.nexus_first_login_at,
-        photoStatus: signals?.data?.photo_status,
+        nexusFirstLoginAt: user?.nexus_first_login_at,
+        photoStatus: user?.photo_status,
       });
       view.guide = { count: progress.count, total: progress.total };
     }

@@ -18,6 +18,7 @@
     "./fee-plan": "./src/utils/fee-plan.ts",
     "./enrolment-link": "./src/utils/enrolment-link.ts",
     "./student-pay": "./src/utils/student-pay.ts",
+    "./person-name": "./src/utils/person-name.ts",
     "./enrol-lead-update": "./src/utils/enrol-lead-update.ts",
     "./direct-enrolment": "./src/services/direct-enrolment.ts",
     "./desk-finalise-enrolment": "./src/services/desk-finalise-enrolment.ts",

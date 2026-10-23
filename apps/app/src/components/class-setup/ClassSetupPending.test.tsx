@@ -12,12 +12,10 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('@/components/post-enrollment/OnboardingChecklist', () => ({
-  default: () => <div>Old checklist</div>,
-}));
 
 import ClassSetupPending, { type ClassSetupPendingData } from './ClassSetupPending';
 import ClassSetupCard from './ClassSetupCard';
+import ClassSetupNotice from './ClassSetupNotice';
 
 const waiting: ClassSetupPendingData = {
   ready: false,
@@ -64,7 +62,6 @@ describe('ClassSetupCard', () => {
     wrap(<ClassSetupCard />);
     expect(await screen.findByText(/2 of 5 done/)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe('/onboarding');
-    expect(screen.queryByText('Old checklist')).toBeNull();
   });
 
   it('says the account is on its way while pending', async () => {
@@ -73,10 +70,11 @@ describe('ClassSetupCard', () => {
     expect(await screen.findByText('Your class account is on its way')).toBeTruthy();
   });
 
-  it('keeps the old checklist for students outside the new flow', async () => {
+  it('shows nothing for someone not enrolled yet', async () => {
     replyWith({ ready: false, pending: null });
-    wrap(<ClassSetupCard />);
-    expect(await screen.findByText('Old checklist')).toBeTruthy();
+    const { container } = wrap(<ClassSetupCard />);
+    await waitFor(() => expect(container.querySelector('.MuiSkeleton-root')).toBeNull());
+    expect(container.textContent).toBe('');
   });
 
   it('hides once all five are done', async () => {
@@ -85,5 +83,21 @@ describe('ClassSetupCard', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     await waitFor(() => expect(container.querySelector('.MuiSkeleton-root')).toBeNull());
     expect(screen.queryByText(/class setup/i)).toBeNull();
+  });
+});
+
+describe('ClassSetupNotice', () => {
+  it('offers Try again when the setup could not load', async () => {
+    const onRetry = vi.fn(async () => {});
+    wrap(<ClassSetupNotice kind="error" onRetry={onRetry} />);
+    expect(screen.getByRole('heading', { name: 'Could not load your class setup' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
+  });
+
+  it('sends someone not enrolled to their application', () => {
+    wrap(<ClassSetupNotice kind="not-enrolled" />);
+    expect(screen.getByRole('heading', { name: 'Your class setup starts after you enrol' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'See my application' }).getAttribute('href')).toBe('/my-applications');
   });
 });

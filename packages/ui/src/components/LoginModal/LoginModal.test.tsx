@@ -72,12 +72,37 @@ afterEach(() => {
 });
 
 describe('LoginModal', () => {
+  it('lets a Gulf student pick their country and sends the OTP there', async () => {
+    mockServer();
+    const onAuthenticated = vi.fn();
+    render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" onAuthenticated={onAuthenticated} />);
+    fireEvent.click(screen.getByRole('button', { name: /Country code \+91/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /United Arab Emirates/ }));
+    expect(screen.getByText(/Enter your 9-digit mobile number/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '551993240' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+    await screen.findByLabelText('OTP');
+    fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '123456' } });
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('551993240', '+971551993240'));
+    expect(auth.sendPhoneOTP).toHaveBeenCalledWith('+971551993240');
+  });
+
+  it('opens on the country of a prefilled Gulf number, and a pasted number picks its own', async () => {
+    mockServer();
+    render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" initialPhone="+966512345678" />);
+    expect(screen.getByRole('button', { name: /Country code \+966/ })).toBeTruthy();
+    expect((screen.getByLabelText('Phone Number') as HTMLInputElement).value).toBe('512345678');
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '+974 5512 3456' } });
+    expect(screen.getByRole('button', { name: /Country code \+974/ })).toBeTruthy();
+    expect((screen.getByLabelText('Phone Number') as HTMLInputElement).value).toBe('55123456');
+  });
+
   it('links the phone to the signed-in account (never a separate phone sign-in) and reports the number', async () => {
     const fetchMock = mockServer();
     const onAuthenticated = vi.fn();
     render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" onAuthenticated={onAuthenticated} />);
     await sendAndEnterOtp();
-    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210'));
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210', '+919876543210'));
     expect(auth.sendPhoneOTP).toHaveBeenCalledWith('+919876543210');
     expect(auth.verifyPhoneAndLink).toHaveBeenCalledWith('123456');
     expect(auth.verifyPhoneOTP).not.toHaveBeenCalled();
@@ -102,7 +127,7 @@ describe('LoginModal', () => {
     render(<LoginModal open phoneOnly apiBaseUrl="" onAuthenticated={onAuthenticated} />);
     await sendAndEnterOtp();
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in with this number' }));
-    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210'));
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210', '+919876543210'));
     expect(auth.signInWithPhoneCredential).toHaveBeenCalledWith(credential);
     const adopt = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/adopt-account'));
     expect(JSON.parse((adopt![1] as any).body)).toEqual({ previousIdToken: 'token-1', idToken: 'token-phone' });
@@ -227,7 +252,7 @@ describe('LoginModal', () => {
     fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '12345' } });
     expect(auth.verifyPhoneAndLink).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '123456' } });
-    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210'));
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210', '+919876543210'));
     expect(auth.verifyPhoneAndLink).toHaveBeenCalledTimes(1);
   });
 

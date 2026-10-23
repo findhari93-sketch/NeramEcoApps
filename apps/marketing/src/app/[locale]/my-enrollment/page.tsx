@@ -9,40 +9,12 @@ import {
   Button,
   CircularProgress,
   Alert,
-  Checkbox,
-  LinearProgress,
   Chip,
 } from '@neram/ui';
-import {
-  CheckCircleOutlined,
-  CheckCircle,
-  RadioButtonUnchecked,
-  OpenInNew,
-  WhatsApp,
-  Laptop,
-  Groups,
-  Person,
-  Google,
-} from '@mui/icons-material';
+import { CheckCircleOutlined, Google, RocketLaunch } from '@mui/icons-material';
 import { useFirebaseAuth } from '@neram/auth';
-import { tokens, brandColors } from '@/design-system';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
-
-interface OnboardingStep {
-  id: string;
-  isCompleted: boolean;
-  completedAt: string | null;
-  completedByType: string | null;
-  stepKey: string;
-  title: string;
-  description: string | null;
-  iconName: string | null;
-  actionType: 'link' | 'in_app' | 'manual';
-  actionConfig: Record<string, unknown>;
-  displayOrder: number;
-  isRequired: boolean;
-}
 
 interface EnrollmentData {
   studentId: string;
@@ -60,25 +32,16 @@ interface EnrollmentData {
     father_name: string | null;
     parent_phone: string | null;
   } | null;
-  onboardingSteps: OnboardingStep[];
 }
 
-function getOnboardingIcon(iconName: string | null) {
-  switch (iconName) {
-    case 'WhatsApp': return <WhatsApp sx={{ color: brandColors.whatsappDark }} />;
-    case 'Laptop': return <Laptop sx={{ color: tokens.navy900 }} />;
-    case 'Groups': return <Groups sx={{ color: tokens.navy900 }} />;
-    case 'Person': return <Person sx={{ color: tokens.navy900 }} />;
-    default: return null;
-  }
-}
+/** The class setup guide in the student app, reached signed in through /sso. */
+const SETUP_URL = `/sso?redirect=${encodeURIComponent(`${APP_URL}/onboarding`)}`;
 
 export default function MyEnrollmentPage() {
   const { user, loading: authLoading, signInWithGoogle } = useFirebaseAuth();
   const [data, setData] = useState<EnrollmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [togglingStep, setTogglingStep] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -113,31 +76,6 @@ export default function MyEnrollmentPage() {
     }
   }, [authLoading, user, fetchData]);
 
-  const handleToggleStep = async (step: OnboardingStep) => {
-    if (!user) return;
-    setTogglingStep(step.id);
-    try {
-      const firebaseUser = (user.raw as any);
-      const idToken = await firebaseUser?.getIdToken();
-      const res = await fetch(`/api/enroll/onboarding-steps/${step.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ isCompleted: !step.isCompleted }),
-      });
-      const json = await res.json();
-      if (res.ok && json.data) {
-        setData((prev) => prev ? {
-          ...prev,
-          onboardingSteps: prev.onboardingSteps.map((s) =>
-            s.id === step.id ? { ...s, isCompleted: json.data.isCompleted, completedAt: json.data.completedAt } : s
-          ),
-        } : prev);
-      }
-    } catch { /* silent */ } finally {
-      setTogglingStep(null);
-    }
-  };
-
   // Auth loading
   if (authLoading) {
     return (
@@ -155,7 +93,7 @@ export default function MyEnrollmentPage() {
           My Enrollment
         </Typography>
         <Typography color="text.secondary" mb={3}>
-          Sign in with Google to view your enrollment details and onboarding steps.
+          Sign in with Google to view your enrollment details and set up your class account.
         </Typography>
         <Button
           variant="contained"
@@ -205,9 +143,6 @@ export default function MyEnrollmentPage() {
       </Container>
     );
   }
-
-  const completedSteps = data.onboardingSteps.filter((s) => s.isCompleted).length;
-  const totalSteps = data.onboardingSteps.length;
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
@@ -278,115 +213,32 @@ export default function MyEnrollmentPage() {
         </Box>
       </Paper>
 
-      {/* Onboarding Steps */}
-      {totalSteps > 0 && (
-        <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, border: '1px solid', borderColor: 'divider', borderRadius: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      {/* Class setup: the one onboarding, in the student app */}
+      <Paper
+        elevation={0}
+        sx={{ p: { xs: 2, md: 3 }, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, mb: 3 }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <RocketLaunch aria-hidden sx={{ color: 'primary.main', mt: 0.25 }} />
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" fontWeight={700}>
-              Complete Your Onboarding
+              Set up your class account
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {completedSteps} of {totalSteps} complete
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              Five quick steps on your phone: your batch WhatsApp group, Microsoft Authenticator, Teams, your Neram sign-in and Nexus.
             </Typography>
           </Box>
-
-          <LinearProgress
-            variant="determinate"
-            value={(completedSteps / totalSteps) * 100}
-            sx={{ mb: 2, borderRadius: 1, height: 6 }}
-          />
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {data.onboardingSteps.map((step) => (
-              <Paper
-                key={step.id}
-                variant="outlined"
-                sx={{
-                  p: { xs: 1.5, md: 2 },
-                  borderRadius: 1.5,
-                  bgcolor: step.isCompleted ? 'success.50' : 'transparent',
-                  borderColor: step.isCompleted ? 'success.light' : 'divider',
-                  opacity: togglingStep === step.id ? 0.7 : 1,
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                  <Checkbox
-                    checked={step.isCompleted}
-                    onChange={() => handleToggleStep(step)}
-                    disabled={togglingStep === step.id}
-                    icon={<RadioButtonUnchecked />}
-                    checkedIcon={<CheckCircle />}
-                    sx={{ p: 0.5, mt: 0.25 }}
-                  />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                      {step.iconName && (
-                        <Box sx={{ display: 'flex', fontSize: 20 }}>
-                          {getOnboardingIcon(step.iconName)}
-                        </Box>
-                      )}
-                      <Typography
-                        variant="body1"
-                        fontWeight={600}
-                        sx={{
-                          textDecoration: step.isCompleted ? 'line-through' : 'none',
-                          color: step.isCompleted ? 'text.secondary' : 'text.primary',
-                        }}
-                      >
-                        {step.title}
-                      </Typography>
-                    </Box>
-                    {step.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        {step.description}
-                      </Typography>
-                    )}
-                    {step.actionType === 'link' && !!(step.actionConfig?.url) && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        href={step.actionConfig.url as string}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        endIcon={<OpenInNew sx={{ fontSize: 14 }} />}
-                        sx={{ borderRadius: 1, textTransform: 'none', fontSize: 12, py: 0.25 }}
-                      >
-                        Open
-                      </Button>
-                    )}
-                    {step.actionType === 'in_app' && !!(step.actionConfig?.route) && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        href={`${APP_URL}${step.actionConfig.route}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        endIcon={<OpenInNew sx={{ fontSize: 14 }} />}
-                        sx={{ borderRadius: 1, textTransform: 'none', fontSize: 12, py: 0.25 }}
-                      >
-                        Go to Student App
-                      </Button>
-                    )}
-                  </Box>
-                </Box>
-              </Paper>
-            ))}
-          </Box>
-        </Paper>
-      )}
-
-      {/* Go to App button */}
-      <Box sx={{ textAlign: 'center' }}>
+        </Box>
         <Button
           variant="contained"
           size="large"
-          href={`/sso?redirect=${encodeURIComponent(APP_URL)}`}
-          sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none', px: 4 }}
+          fullWidth
+          href={SETUP_URL}
+          sx={{ mt: 2, minHeight: 48, borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
         >
-          Go to Student App
+          Open my class setup
         </Button>
-      </Box>
+      </Paper>
     </Container>
   );
 }

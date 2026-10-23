@@ -11,6 +11,7 @@ import {
   type GuideStepKey,
 } from '@neram/database/class-account';
 import { verifyIdToken } from '@/lib/firebase-admin';
+import { enrolmentStageFrom, type EnrolmentLinkRow, type EnrolmentStage } from '@/lib/class-setup-stage';
 
 const NEXUS_URL = 'https://nexus.neramclasses.com';
 /** A change within this long of creation or a reset is Microsoft setting the start password, not the student. */
@@ -51,25 +52,16 @@ async function detectPasswordChange(supabase: any, setup: any): Promise<string |
   return times.value.passwordChangedAt;
 }
 
-type EnrolmentStage = 'checking' | 'enrolled' | null;
-
-/**
- * Where the student's direct enrolment link is: payment sent and waiting for
- * staff to check it, or verified and enrolled. Null when they never sent one,
- * so they keep the older onboarding.
- */
-async function enrolmentStage(supabase: any, userId: string): Promise<EnrolmentStage> {
-  const { data: links } = await supabase
-    .from('direct_enrollment_links')
-    .select('status, submitted_at, rejected_at')
-    .or(`submitted_user_id.eq.${userId},user_id.eq.${userId},used_by.eq.${userId}`)
-    .neq('status', 'cancelled');
-  const rows = (links || []) as any[];
-  if (rows.some((l) => l.status === 'used')) return 'enrolled';
-  const waiting = rows.some(
-    (l) => l.status === 'active' && l.submitted_at && (!l.rejected_at || new Date(l.rejected_at) < new Date(l.submitted_at)),
-  );
-  return waiting ? 'checking' : null;
+/** Where the student is on the way into class: see enrolmentStageFrom. */
+async function enrolmentStage(supabase: any, userId: string, userType: string | null | undefined): Promise<EnrolmentStage> {
+  const [{ data: links }, { data: profile }] = await Promise.all([
+    supabase
+      .from('direct_enrollment_links')
+      .select('status, submitted_at, rejected_at')
+      .or(`submitted_user_id.eq.${userId},user_id.eq.${userId},used_by.eq.${userId}`),
+    supabase.from('student_profiles').select('id').eq('user_id', userId).maybeSingle(),
+  ]);
+  return enrolmentStageFrom((links || []) as EnrolmentLinkRow[], !!profile, userType);
 }
 
 const isNeramLogin = (value: unknown): value is string =>
@@ -121,9 +113,9 @@ async function adoptHandMadeAccount(supabase: any, userId: string, msOid: string
  * the start password until they have changed it, their batch WhatsApp group,
  * and which of the five steps are done.
  *
- * A student who enrolled with a direct link never gets the older onboarding:
- * before their account exists they get `pending` (payment being checked, or
- * account being made). `?summary=1` (the dashboard card) skips asking
+ * Every enrolled student gets the guide. Before their account exists they get
+ * `pending` (payment being checked, or account being made); someone who has
+ * not enrolled gets `{ ready: false, pending: null }`. `?summary=1` (the dashboard card) skips asking
  * Microsoft about the password.
  */
 export async function GET(request: NextRequest) {
@@ -139,7 +131,7 @@ export async function GET(request: NextRequest) {
       supabase.from('class_account_setups').select('*').eq('user_id', userId).maybeSingle(),
       supabase
         .from('users')
-        .select('name, first_name, email, ms_oid, linked_classroom_email, nexus_first_login_at, photo_status')
+        .select('name, first_name, email, ms_oid, user_type, linked_classroom_email, nexus_first_login_at, photo_status')
         .eq('id', userId)
         .maybeSingle(),
     ]);
@@ -147,7 +139,7 @@ export async function GET(request: NextRequest) {
     let setup = found;
 
     if (!setup || setup.steps?.account?.status !== 'done') {
-      const stage = await enrolmentStage(supabase, userId);
+      const stage = await enrolmentStage(supabase, userId, user?.user_type);
       if (!setup && stage === 'enrolled' && user?.ms_oid) {
         setup = await adoptHandMadeAccount(supabase, userId, user.ms_oid, user).catch(() => null);
       }

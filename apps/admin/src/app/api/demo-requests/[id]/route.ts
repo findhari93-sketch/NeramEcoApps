@@ -28,6 +28,7 @@ import {
   type InterestLevel,
   type DemoRequest,
   type FeeView,
+  demoPhone,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
@@ -40,6 +41,7 @@ import { hasLiveTeamsMeeting, syncDemoTeams } from '@/lib/demo/teams-sync';
 import type { DemoWithTeams } from '@/lib/demo/teams-artifacts';
 import { finaliseEnrolmentFromDesk } from '@neram/database/desk-finalise-enrolment';
 import { linkIsUnfinalisedRecorded } from '@/components/demo-requests/journey';
+import { formatLaterDate, laterContactAt, laterDateError } from '@/lib/demo/try-later';
 
 type Params = { params: { id: string } };
 
@@ -109,7 +111,7 @@ async function deskEnrolmentLink(supabase: any, demoId: string, userId: string |
   const { data, error } = await supabase
     .from('direct_enrollment_links')
     .select(
-      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason, verified_at, verified_by, user_id, submitted_user_id',
+      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason, verified_at, verified_by, user_id, submitted_user_id, payment_date',
     )
     .or(match)
     .order('created_at', { ascending: false })
@@ -130,8 +132,26 @@ async function deskEnrolmentLink(supabase: any, demoId: string, userId: string |
     rows.find((l: any) => l.status === 'used') ||
     rows[0];
   if (!pick) return null;
-  const { data: maker } = await supabase.from('users').select('name').eq('id', pick.created_by).maybeSingle();
-  return { ...pick, created_by_name: maker?.name ?? null };
+  const studentId = pick.submitted_user_id || pick.user_id;
+  const [{ data: maker }, signedInAt] = await Promise.all([
+    supabase.from('users').select('name').eq('id', pick.created_by).maybeSingle(),
+    studentId ? studentSignedInAt(supabase, studentId) : Promise.resolve(null),
+  ]);
+  return { ...pick, created_by_name: maker?.name ?? null, student_signed_in_at: signedInAt };
+}
+
+/**
+ * When the student first used their class account: opened Nexus, or chose their
+ * own Microsoft password. Null when they have no Microsoft account or never signed in.
+ */
+async function studentSignedInAt(supabase: any, userId: string): Promise<string | null> {
+  const [{ data: user }, { data: setup }] = await Promise.all([
+    supabase.from('users').select('ms_oid, nexus_first_login_at').eq('id', userId).maybeSingle(),
+    supabase.from('class_account_setups').select('password_changed_at').eq('user_id', userId).maybeSingle(),
+  ]);
+  if (!user?.ms_oid) return null;
+  const times = [user.nexus_first_login_at, setup?.password_changed_at].filter(Boolean) as string[];
+  return times.length ? times.sort()[0] : null;
 }
 
 /** GET /api/demo-requests/[id]: the request, its activity log and its WhatsApp queue. */
@@ -160,6 +180,12 @@ function parseMinutes(v: unknown, fallback: number): number {
 
 function text(v: unknown, max = 500): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
+}
+
+/** A YYYY-MM-DD day, or null. */
+function isoDay(v: unknown): string | null {
+  const s = typeof v === 'string' ? v.slice(0, 10) : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
 function email(v: unknown): string | null {
@@ -196,7 +222,7 @@ export async function POST(req: Request, { params }: Params) {
       case 'log_call': {
         const outcome = body.outcome as DemoRequest['last_call_outcome'];
         const note = text(body.note) || null;
-        if (!outcome || !['interested', 'no_answer', 'call_back', 'not_interested'].includes(outcome)) {
+        if (!outcome || !['interested', 'no_answer', 'call_back', 'not_interested', 'joined_elsewhere'].includes(outcome)) {
           throw new ActionError('Pick how the call went.');
         }
         if (!['pending', 'contacted'].includes(r.status)) throw new ActionError('This request is already confirmed or closed.');
@@ -209,14 +235,14 @@ export async function POST(req: Request, { params }: Params) {
           if (!at || Number.isNaN(at.getTime())) throw new ActionError('Pick when to call back.');
           patch.status = 'contacted';
           patch.next_contact_at = at.toISOString();
-        } else if (outcome === 'not_interested') {
+        } else if (outcome === 'not_interested' || outcome === 'joined_elsewhere') {
           if (!note) throw new ActionError('Add a short reason so the team knows why.');
           patch.status = 'rejected';
           patch.rejection_reason = note;
           patch.next_contact_at = null;
         }
         await updateDemoRequest(r.id, patch, supabase);
-        if (outcome === 'not_interested') await cancelPendingDemoMessages(r.id, undefined, supabase);
+        if (patch.status === 'rejected') await cancelPendingDemoMessages(r.id, undefined, supabase);
         // Neram Assistant reminds whoever logged the call when the call-back is due.
         if (outcome === 'call_back' && actorId && patch.next_contact_at) {
           await cancelPendingDemoMessages(r.id, ['staff_callback'], supabase);
@@ -250,20 +276,33 @@ export async function POST(req: Request, { params }: Params) {
         if (!linkIsUnfinalisedRecorded(link)) {
           throw new ActionError(link.status === 'used' ? 'This enrolment is already finalised.' : 'There is no recorded payment to finalise on this link.');
         }
-        const totalFee = Number(body.totalFee);
-        const amountPaid = Number(body.amountPaid);
+        // The money staff already entered on the link is the default: Finalise only confirms it.
+        const totalFee = body.totalFee == null ? Number(link.final_fee) : Number(body.totalFee);
+        const amountPaid = body.amountPaid == null ? Number(link.amount_paid) : Number(body.amountPaid);
         if (!Number.isFinite(totalFee) || totalFee <= 0) throw new ActionError('Enter the total fee.');
         if (!Number.isFinite(amountPaid) || amountPaid <= 0) throw new ActionError('Enter the amount paid.');
         if (amountPaid > totalFee + 0.01) throw new ActionError('The amount paid cannot be more than the total fee.');
         const mode = body.mode === 'fold_parent' ? 'fold_parent' : 'create';
         const studentUserId = text(body.studentUserId, 64);
         if (mode === 'fold_parent' && !studentUserId) throw new ActionError('Pick the existing student account to link.');
-        const dueDate = typeof body.installment2DueDate === 'string' && body.installment2DueDate ? body.installment2DueDate : null;
+        const dueDate =
+          typeof body.installment2DueDate === 'string' && body.installment2DueDate
+            ? body.installment2DueDate
+            : (link as any).installment_2_due_date || null;
+        // When they joined: the paid date staff confirm, else the one on the link.
+        const joinedOn = isoDay(body.joinedOn) || isoDay((link as any).payment_date);
         const res = await finaliseEnrolmentFromDesk(supabase, {
           link,
           demoId: r.id,
           actorId,
-          money: { totalFee, amountPaid, installment2DueDate: dueDate, method: 'manual' },
+          money: {
+            totalFee,
+            amountPaid,
+            installment2DueDate: dueDate,
+            method: (link as any).payment_method || 'manual',
+            reference: (link as any).transaction_reference || null,
+            paidOn: joinedOn,
+          },
           target: mode === 'fold_parent' ? { mode, studentUserId } : { mode: 'create' },
         });
         if (!res.ok) throw new ActionError(res.error, res.status);
@@ -299,7 +338,7 @@ export async function POST(req: Request, { params }: Params) {
         const dueDate = typeof body.installment2DueDate === 'string' && body.installment2DueDate ? body.installment2DueDate : null;
         const method = text(body.method, 40) || 'manual';
         const reference = text(body.reference, 120) || null;
-        const paidOn = typeof body.paymentDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate) ? body.paymentDate : null;
+        const paidOn = isoDay(body.paymentDate);
         let mode: 'create' | 'fold_parent' = body.mode === 'fold_parent' ? 'fold_parent' : 'create';
         let studentUserId = text(body.studentUserId, 64);
         if (mode === 'fold_parent' && !studentUserId) throw new ActionError('Pick the existing student account to link.');
@@ -451,8 +490,10 @@ export async function POST(req: Request, { params }: Params) {
           patch.name = name;
         }
         if (typeof body.phone === 'string') {
-          const p = text(body.phone, 20);
-          if (!p) throw new ActionError('Phone cannot be empty.');
+          // Stored like a new demo: Indian as 10 digits, Gulf with its code.
+          if (!text(body.phone, 20)) throw new ActionError('Phone cannot be empty.');
+          const p = demoPhone(text(body.phone, 20));
+          if (!p) throw new ActionError('Enter a mobile number from India or the Gulf.');
           patch.phone = p;
         }
         if (body.email !== undefined) patch.email = email(body.email);
@@ -462,7 +503,12 @@ export async function POST(req: Request, { params }: Params) {
           patch.exam_year = Number.isInteger(y) && y >= 2024 && y <= 2035 ? y : null;
         }
         if (body.parentName !== undefined) patch.parent_name = text(body.parentName, 120) || null;
-        if (body.parentPhone !== undefined) patch.parent_phone = text(body.parentPhone, 20) || null;
+        if (body.parentPhone !== undefined) {
+          const raw = text(body.parentPhone, 20);
+          const p = raw ? demoPhone(raw) : null;
+          if (raw && !p) throw new ActionError('Enter the parent mobile from India or the Gulf, or leave it blank.');
+          patch.parent_phone = p;
+        }
         if (body.parentEmail !== undefined) patch.parent_email = email(body.parentEmail);
         if (typeof body.parentJoining === 'boolean') patch.parent_joining = body.parentJoining;
         if (body.accountHolder === 'student' || body.accountHolder === 'parent') patch.account_holder = body.accountHolder;
@@ -553,6 +599,8 @@ export async function POST(req: Request, { params }: Params) {
         if (!['pending', 'contacted', 'approved'].includes(r.status)) throw new ActionError('This request is already closed.');
         const reason = text(body.reason);
         if (!reason) throw new ActionError('Add the reason for cancelling.');
+        // Joined another class: closed for live classes, kept findable for a self-study offer later.
+        const joinedElsewhere = body.joinedElsewhere === true;
         const wasConfirmed = r.status === 'approved';
         if (wasConfirmed && r.organizer_upn && r.graph_event_id) {
           await cancelDemoEvent(r.organizer_upn, r.graph_event_id, reason);
@@ -563,6 +611,7 @@ export async function POST(req: Request, { params }: Params) {
             status: 'cancelled',
             cancel_reason: reason,
             next_contact_at: null,
+            ...(joinedElsewhere ? { last_call_outcome: 'joined_elsewhere' as const } : {}),
             ...(r.graph_event_id ? { graph_event_id: cancelledEventMarker(r.graph_event_id) } : {}),
           },
           supabase,
@@ -572,7 +621,54 @@ export async function POST(req: Request, { params }: Params) {
           await enqueueDemoMessages(r, [{ kind: 'cancelled', sendAfter: new Date() }], supabase);
           sendNow = true;
         }
-        await log('status', 'cancelled', reason);
+        await log('status', joinedElsewhere ? 'joined_elsewhere' : 'cancelled', joinedElsewhere ? `Joined another class: ${reason}` : reason);
+        break;
+      }
+
+      case 'try_later': {
+        // The family asked us to wait. Park it with a date; it comes back then.
+        if (!['pending', 'contacted', 'approved'].includes(r.status)) throw new ActionError('This request is already closed.');
+        const reason = text(body.reason, 300);
+        if (!reason || reason.length < 3) throw new ActionError('Add a short note on why they asked to wait.');
+        const dateKey = typeof body.laterDate === 'string' ? body.laterDate : '';
+        const dateError = laterDateError(dateKey, new Date());
+        if (dateError) throw new ActionError(dateError);
+        const at = laterContactAt(dateKey);
+        const wasConfirmed = r.status === 'approved';
+        if (wasConfirmed && r.organizer_upn && r.graph_event_id && !r.graph_event_id.startsWith('cancelled:')) {
+          await cancelDemoEvent(r.organizer_upn, r.graph_event_id, `As you asked, we will check back with you around ${formatLaterDate(at)}.`);
+        }
+        await updateDemoRequest(
+          r.id,
+          {
+            status: 'contacted',
+            last_call_outcome: 'later',
+            next_contact_at: at.toISOString(),
+            later_reason: reason,
+            later_nudged_at: null,
+            scheduled_start: null,
+            teams_join_url: null,
+            graph_event_id: null,
+          },
+          supabase,
+        );
+        await cancelPendingDemoMessages(r.id, undefined, supabase);
+        // The Neram Assistant reminds whoever parked it (else the demo's team) on the day.
+        let remindIds = actorId ? [actorId] : [];
+        if (!remindIds.length) {
+          const byUpn = await staffUserIdsByUpn([r.tutor_upn, r.organizer_upn].filter(Boolean) as string[], supabase);
+          remindIds = Array.from(new Set(Object.values(byUpn)));
+        }
+        await enqueueDemoStaffMessages(
+          r.id,
+          remindIds.map((userId) => ({ userId, kind: 'staff_callback' as const, sendAfter: at })),
+          supabase,
+        );
+        await log(
+          'call',
+          'later',
+          `Try later: ${formatLaterDate(at)}. ${reason}${wasConfirmed ? ' The confirmed demo was cancelled.' : ''}`,
+        );
         break;
       }
 

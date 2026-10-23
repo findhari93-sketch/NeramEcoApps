@@ -1,4 +1,5 @@
 import { formatDemoDateTime, formatDemoPreference, type DemoScheduleSettings } from '@neram/database';
+import { mobileE164, mobileParts } from '@neram/database/phone';
 import type { DemoRequest } from './types';
 
 export function ago(iso: string, now: Date): string {
@@ -34,19 +35,19 @@ export function classLabel(v: string | null): string | null {
   return v ? CLASS_LABELS[v] || v : null;
 }
 
-/** +91 98765 43210 */
+/** +91 98765 43210, or a Gulf number with its own code: +971 551993240 */
 export function prettyPhone(p: string | null): string {
-  const d = (p || '').replace(/\D/g, '').slice(-10);
-  return d.length === 10 ? `+91 ${d.slice(0, 5)} ${d.slice(5)}` : p || '';
+  const { country, national } = mobileParts(p);
+  if (country.code !== 'IN') return `${country.prefix} ${national}`;
+  return national.length === 10 ? `+91 ${national.slice(0, 5)} ${national.slice(5)}` : p || '';
 }
 
 export function telHref(p: string): string {
-  return `tel:+91${(p || '').replace(/\D/g, '').slice(-10)}`;
+  return `tel:${mobileE164(p)}`;
 }
 
 export function waHref(p: string, text?: string): string {
-  const d = (p || '').replace(/\D/g, '').slice(-10);
-  return `https://wa.me/91${d}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+  return `https://wa.me/${mobileE164(p).slice(1)}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
 /** New requests should get a call within 2 hours. */

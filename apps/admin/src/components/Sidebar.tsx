@@ -54,7 +54,6 @@ import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import GavelIcon from '@mui/icons-material/Gavel';
-import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WorkIcon from '@mui/icons-material/Work';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import DomainIcon from '@mui/icons-material/Domain';
@@ -147,7 +146,6 @@ const menuGroups: MenuGroup[] = [
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment', hasBadge: 'direct_enrollment' },
-      { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
       { text: 'AskSeniors', icon: EmojiEventsIcon, path: '/ask-seniors' },
       { text: 'Alumni', icon: HistoryEduIcon, path: '/alumni' },
