@@ -16,6 +16,7 @@ import {
   type OutreachTemplateVariant,
 } from '@/lib/college-outreach/templates';
 import { sendOutreachEmail } from '@/lib/college-outreach/send';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -271,7 +272,7 @@ export async function POST(req: NextRequest) {
         outreach_log_id: logRow?.id ?? null,
         failed,
       },
-      { status: 502 },
+      { status: UPSTREAM_FAILED },
     );
   }
 

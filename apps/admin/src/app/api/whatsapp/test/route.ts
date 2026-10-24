@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { sendWhatsAppTemplate } from '@neram/database';
 import { requireAdminRole } from '@/lib/marketing-ai/guard';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * POST /api/whatsapp/test  { phone }
@@ -20,5 +21,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Enter a 10-digit Indian mobile number.' }, { status: 400 });
   }
   const result = await sendWhatsAppTemplate(phone, 'hello_world', 'en_US');
-  return NextResponse.json(result, { status: result.success ? 200 : 502 });
+  return NextResponse.json(result, { status: result.success ? 200 : UPSTREAM_FAILED });
 }

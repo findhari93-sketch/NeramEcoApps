@@ -337,7 +337,8 @@ export default function DemoReview({
     setVideo({ url: null, error: null, loading: true });
     try {
       const res = await fetch(`/api/demo-requests/${id}/recording`, { cache: 'no-store' });
-      const body = await res.json();
+      // A proxy error page (Cloudflare 502/504) is HTML, not JSON: fall back to the generic message.
+      const body = await res.json().catch(() => ({}));
       setVideo(res.ok ? { url: body.url, error: null, loading: false } : { url: null, error: body.error || 'Could not load the video.', loading: false });
     } catch {
       setVideo({ url: null, error: 'Could not reach Admin. Try again.', loading: false });
@@ -348,7 +349,7 @@ export default function DemoReview({
     setTranscript({ cues: [], stats: null, error: null, loading: true });
     try {
       const res = await fetch(`/api/demo-requests/${id}/transcript`, { cache: 'no-store' });
-      const body = await res.json();
+      const body = await res.json().catch(() => ({}));
       setTranscript(
         res.ok
           ? { cues: body.cues ?? [], stats: body.stats ?? null, error: null, loading: false }

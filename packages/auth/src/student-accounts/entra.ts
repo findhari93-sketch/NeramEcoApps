@@ -107,6 +107,13 @@ export interface CreateEntraUserInput {
   /** "+91 9876543210". Stored on the account so a later reconcile can match by phone. */
   mobilePhone: string | null;
   usageLocation: string;
+  /** What staff always filled by hand: job title Student, department NNE28 (the exam year). */
+  jobTitle?: string | null;
+  department?: string | null;
+  /** City and state only. A street address would show to every student in the Teams directory. */
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
 }
 
 export async function createEntraUser(input: CreateEntraUserInput): Promise<GraphResult<{ id: string }>> {
@@ -123,6 +130,11 @@ export async function createEntraUser(input: CreateEntraUserInput): Promise<Grap
         // Microsoft refuses to license an account with no usage location.
         usageLocation: input.usageLocation,
         ...(input.mobilePhone ? { mobilePhone: input.mobilePhone } : {}),
+        ...(input.jobTitle ? { jobTitle: input.jobTitle } : {}),
+        ...(input.department ? { department: input.department } : {}),
+        ...(input.city ? { city: input.city } : {}),
+        ...(input.state ? { state: input.state } : {}),
+        ...(input.country ? { country: input.country } : {}),
         passwordProfile: { forceChangePasswordNextSignIn: true, password: input.password },
       }),
     });
@@ -220,10 +232,13 @@ export async function setOtherMails(userId: string, emails: string[]): Promise<G
   }
 }
 
-/** The name Teams shows: first and last name. A missing surname is cleared, never invented. */
+/**
+ * The name Teams shows (first and last name) and, when given, the job title and
+ * department staff always set (Student, NNE28). A missing surname is cleared, never invented.
+ */
 export async function setEntraName(
   userId: string,
-  name: { givenName: string; surname: string | null },
+  name: { givenName: string; surname: string | null; jobTitle?: string | null; department?: string | null },
 ): Promise<GraphResult<void>> {
   try {
     const res = await graph(`/users/${encodeURIComponent(userId)}`, {
@@ -232,10 +247,57 @@ export async function setEntraName(
         displayName: [name.givenName, name.surname].filter(Boolean).join(' '),
         givenName: name.givenName,
         surname: name.surname || null,
+        ...(name.jobTitle ? { jobTitle: name.jobTitle } : {}),
+        ...(name.department ? { department: name.department } : {}),
       }),
     });
     if (res.ok) return { ok: true, value: undefined };
     return failed(res, 'User.ReadWrite.All');
+  } catch (err) {
+    return thrown(err);
+  }
+}
+
+/** Job title and department only, for an account whose name staff typed by hand. */
+export async function setEntraJob(
+  userId: string,
+  job: { jobTitle?: string | null; department?: string | null },
+): Promise<GraphResult<void>> {
+  try {
+    const res = await graph(`/users/${encodeURIComponent(userId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...(job.jobTitle ? { jobTitle: job.jobTitle } : {}),
+        ...(job.department ? { department: job.department } : {}),
+      }),
+    });
+    if (res.ok) return { ok: true, value: undefined };
+    return failed(res, 'User.ReadWrite.All');
+  } catch (err) {
+    return thrown(err);
+  }
+}
+
+export interface EntraProfile {
+  displayName: string;
+  jobTitle: string | null;
+  department: string | null;
+}
+
+/** What Teams shows for this account today: the name, job title and department. */
+export async function readEntraProfile(userId: string): Promise<GraphResult<EntraProfile>> {
+  try {
+    const res = await graph(`/users/${encodeURIComponent(userId)}?$select=displayName,jobTitle,department`);
+    if (!res.ok) return failed(res, 'User.Read.All');
+    const data = (await res.json()) as { displayName?: unknown; jobTitle?: unknown; department?: unknown };
+    return {
+      ok: true,
+      value: {
+        displayName: String(data.displayName || ''),
+        jobTitle: data.jobTitle ? String(data.jobTitle) : null,
+        department: data.department ? String(data.department) : null,
+      },
+    };
   } catch (err) {
     return thrown(err);
   }

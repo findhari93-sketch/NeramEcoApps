@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Alert, Box, Button, Paper, Tab, Tabs, Typography } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
@@ -9,6 +9,7 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import InboxIcon from '@mui/icons-material/Inbox';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { OpsPageHeader, OpsSkeleton, EmptyState } from '@/components/ops/OpsUi';
 import RequestList from '@/components/demo-requests/RequestList';
 import RequestPanel from '@/components/demo-requests/RequestPanel';
@@ -18,6 +19,7 @@ import AddDemoDialog from '@/components/demo-requests/AddDemoDialog';
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 import type { DeskDetail, DeskList } from '@/components/demo-requests/types';
 import { DESK_STAGES, groupByPerson, sortPeople, stageOf, type DemoEnrolment, type DeskPerson, type DeskStage } from '@/components/demo-requests/journey';
+import AvatarKey from '@/components/person/AvatarKey';
 
 const EMPTY: Record<DeskStage, { title: string; body: string }> = {
   to_call: { title: 'Nobody to call', body: 'New website requests land here. Call them within 2 hours. Add demo covers WhatsApp and phone enquiries.' },
@@ -27,6 +29,9 @@ const EMPTY: Record<DeskStage, { title: string; body: string }> = {
   later: { title: 'Nobody waiting for later', body: 'When a family asks you to check back, use Try later. They wait here and come back to To call on that date.' },
   closed: { title: 'Nothing closed', body: 'Not interested, joined another class, cancelled and stopped follow-ups are kept here with the reason.' },
 };
+
+/** Below MUI lg: list and details take turns instead of sitting side by side. */
+const NARROW = '(max-width: 1199.95px)';
 
 function stageOfRequest(
   r: DemoRequest,
@@ -134,10 +139,37 @@ function DemoDesk() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.request.id]);
 
+  // Below lg the details replace the list (phone and tablet), so opening a student
+  // is a history step: the phone's Back returns to the list, at the same scroll.
+  const listScroll = useRef(0);
+  const openedByPush = useRef(false);
+  const prevSelected = useRef(selectedId);
+  useEffect(() => {
+    const was = prevSelected.current;
+    prevSelected.current = selectedId;
+    if (!selectedId) openedByPush.current = false;
+    if (!window.matchMedia(NARROW).matches) return;
+    if (selectedId && selectedId !== was) window.scrollTo({ top: 0 });
+    else if (!selectedId && was) window.scrollTo({ top: listScroll.current });
+  }, [selectedId]);
+
   const select = (id: string | null) => {
     setConfirmFor(null);
-    router.replace(id ? `/demo-classes?id=${encodeURIComponent(id)}` : '/demo-classes', { scroll: false });
+    const url = id ? `/demo-classes?id=${encodeURIComponent(id)}` : '/demo-classes';
+    if (id && !selectedId) {
+      listScroll.current = window.scrollY;
+      openedByPush.current = true;
+      router.push(url, { scroll: false });
+    } else if (!id && openedByPush.current) {
+      router.back();
+    } else {
+      router.replace(url, { scroll: false });
+    }
   };
+  const detailOpen = !!selectedId && !!list;
+  // While a student is open below lg, the header, KPIs, tabs and list step aside.
+  const listSide = detailOpen ? { display: { xs: 'none', lg: 'block' } } : undefined;
+  const stageLabel = DESK_STAGES.find((t) => t.id === tab)?.label ?? 'list';
 
   const onAction = async (body: Record<string, unknown>): Promise<string | null> => {
     if (!selectedId) return 'No request selected';
@@ -178,59 +210,61 @@ function DemoDesk() {
 
   return (
     <Box sx={{ maxWidth: 1600, mx: 'auto' }}>
-      <OpsPageHeader
-        icon={VideocamIcon}
-        title="Demo classes"
-        subtitle="One row per student, from first call to enrolment. Website requests land in To call; Add demo covers WhatsApp and phone enquiries, planned demos and demos already held. After the demo, students stay in After demo until they pay the fee or say no."
-        actions={
-          <>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)} disabled={!list} sx={{ minHeight: 44 }}>
-              Add demo
-            </Button>
-            <Button variant="outlined" startIcon={<WhatsAppIcon />} onClick={() => setHealthOpen(true)} sx={{ minHeight: 44 }}>
-              WhatsApp status
-            </Button>
-            <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => setSettingsOpen(true)} sx={{ minHeight: 44 }}>
-              Demo settings
-            </Button>
-            <Button startIcon={<RefreshIcon />} onClick={loadList} sx={{ minHeight: 44 }}>
-              Refresh
-            </Button>
-          </>
-        }
-      />
-
-      {list && !list.settings.hosts.length && (
-        <Alert
-          severity="warning"
-          sx={{ mb: 2 }}
-          action={
-            <Button color="inherit" onClick={() => setSettingsOpen(true)}>
-              Set up team
-            </Button>
+      <Box sx={listSide}>
+        <OpsPageHeader
+          icon={VideocamIcon}
+          title="Demo classes"
+          subtitle="One row per student, from first call to enrolment. Website requests land in To call; Add demo covers WhatsApp and phone enquiries, planned demos and demos already held. After the demo, students stay in After demo until they pay the fee or say no."
+          actions={
+            <>
+              <AvatarKey />
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)} disabled={!list} sx={{ minHeight: 44 }}>
+                Add demo
+              </Button>
+              <Button variant="outlined" startIcon={<WhatsAppIcon />} onClick={() => setHealthOpen(true)} sx={{ minHeight: 44 }}>
+                WhatsApp status
+              </Button>
+              <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => setSettingsOpen(true)} sx={{ minHeight: 44 }}>
+                Demo settings
+              </Button>
+              <Button startIcon={<RefreshIcon />} onClick={loadList} sx={{ minHeight: 44 }}>
+                Refresh
+              </Button>
+            </>
           }
-        >
-          Add the demo team (Hari, Tamil Selvan, Shanthi) in Demo settings, so Confirm can create the Teams meeting and send reminders.
-        </Alert>
-      )}
-      {listError && (
-        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" onClick={loadList}>Retry</Button>}>
-          {listError}
-        </Alert>
-      )}
+        />
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, 1fr)' }, gap: 1.5, mb: 2 }}>
-        {k ? (
-          <>
-            <Kpi label="New, needs a call" value={k.newRequests} />
-            <Kpi label="Follow-ups due today" value={k.followUpsDue ?? 0} hint={k.today ? `${k.today} demo${k.today === 1 ? '' : 's'} today` : undefined} />
-            <Kpi label="Confirmed, next 7 days" value={k.confirmedNext7} />
-            <Kpi label="Attendance, 30 days" value={k.attendanceRate30 === null ? 'No data' : `${k.attendanceRate30}%`} />
-            <Kpi label="Enrolled after demo" value={k.enrolled30} hint={`of ${k.requests30} who asked in 30 days`} />
-          </>
-        ) : (
-          Array.from({ length: 5 }).map((_, i) => <OpsSkeleton key={i} variant="rounded" height={86} />)
+        {list && !list.settings.hosts.length && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" onClick={() => setSettingsOpen(true)}>
+                Set up team
+              </Button>
+            }
+          >
+            Add the demo team (Hari, Tamil Selvan, Shanthi) in Demo settings, so Confirm can create the Teams meeting and send reminders.
+          </Alert>
         )}
+        {listError && (
+          <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" onClick={loadList}>Retry</Button>}>
+            {listError}
+          </Alert>
+        )}
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, 1fr)' }, gap: 1.5, mb: 2 }}>
+          {k ? (
+            <>
+              <Kpi label="New, needs a call" value={k.newRequests} />
+              <Kpi label="Follow-ups due today" value={k.followUpsDue ?? 0} hint={k.today ? `${k.today} demo${k.today === 1 ? '' : 's'} today` : undefined} />
+              <Kpi label="Confirmed, next 7 days" value={k.confirmedNext7} />
+              <Kpi label="Attendance, 30 days" value={k.attendanceRate30 === null ? 'No data' : `${k.attendanceRate30}%`} />
+              <Kpi label="Enrolled after demo" value={k.enrolled30} hint={`of ${k.requests30} who asked in 30 days`} />
+            </>
+          ) : (
+            Array.from({ length: 5 }).map((_, i) => <OpsSkeleton key={i} variant="rounded" height={86} />)
+          )}
       </Box>
 
       <Tabs
@@ -245,6 +279,15 @@ function DemoDesk() {
           <Tab key={t.id} value={t.id} label={`${t.label} (${counts[t.id]})`} title={t.hint} sx={{ minHeight: 48 }} />
         ))}
       </Tabs>
+      </Box>
+
+      {detailOpen && (
+        <Box sx={{ display: { xs: 'flex', lg: 'none' }, mb: 1 }}>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => select(null)} sx={{ minHeight: 48, px: 1 }}>
+            Back to {stageLabel} ({counts[tab]})
+          </Button>
+        </Box>
+      )}
 
       <Box
         sx={{
@@ -254,7 +297,7 @@ function DemoDesk() {
           alignItems: 'start',
         }}
       >
-        <Box sx={{ minWidth: 0 }}>
+        <Box sx={{ minWidth: 0, ...listSide }}>
           {!list ? (
             <OpsSkeleton variant="rounded" height={320} />
           ) : rows.length === 0 ? (

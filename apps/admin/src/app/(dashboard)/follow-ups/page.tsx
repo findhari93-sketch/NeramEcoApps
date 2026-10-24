@@ -18,6 +18,7 @@ import ClosedFollowUpRow from '@/components/follow-ups/ClosedFollowUpRow';
 import FollowUpExpiryBar from '@/components/follow-ups/FollowUpExpiryBar';
 import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import AvatarKey from '@/components/person/AvatarKey';
 
 type Range = 'overdue' | 'today' | 'week' | 'all' | 'closed';
 const RANGES: readonly Range[] = ['overdue', 'today', 'week', 'all', 'closed'];
@@ -190,6 +191,7 @@ function FollowUpsInner() {
         }
         actions={
           <>
+            <AvatarKey />
             <ToggleButtonGroup
               exclusive
               size="small"

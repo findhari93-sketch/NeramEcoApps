@@ -8,6 +8,7 @@ import AutoDeleteOutlinedIcon from '@mui/icons-material/AutoDeleteOutlined';
 import { formatIstDate } from '@/lib/ops-format';
 import { followUpKindLabel, followUpSourceLabel } from '@/lib/follow-up-source';
 import { StatusChip, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 /** One follow-up the nightly job closed: who, what they asked, why it closed, and Reopen. */
 export default function ClosedFollowUpRow({
@@ -37,26 +38,29 @@ export default function ClosedFollowUpRow({
         alignItems: 'start',
       }}
     >
-      <Box sx={{ minWidth: 0 }}>
-        {item.user_id ? (
-          <Link href={`/crm/${item.user_id}`}>
-            <Typography
-              component="span"
-              variant="body2"
-              fontWeight={700}
-              sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2, overflowWrap: 'anywhere' }}
-            >
+      <Box sx={{ minWidth: 0, display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+        <PersonAvatar userId={item.user_id} name={name} size={36} />
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          {item.user_id ? (
+            <Link href={`/crm/${item.user_id}`}>
+              <Typography
+                component="span"
+                variant="body2"
+                fontWeight={700}
+                sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2, overflowWrap: 'anywhere' }}
+              >
+                {name}
+              </Typography>
+            </Link>
+          ) : (
+            <Typography variant="body2" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>
               {name}
             </Typography>
-          </Link>
-        ) : (
-          <Typography variant="body2" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>
-            {name}
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            {item.person_phone || 'No phone on file'}
           </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-          {item.person_phone || 'No phone on file'}
-        </Typography>
+        </Box>
       </Box>
 
       <Box sx={{ minWidth: 0 }}>

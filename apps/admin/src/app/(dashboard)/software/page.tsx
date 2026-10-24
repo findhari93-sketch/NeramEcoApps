@@ -7,7 +7,6 @@ import {
   Button,
   TextField,
   InputAdornment,
-  UserAvatar,
   Paper,
   Card,
   Stack,
@@ -25,6 +24,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import StudentDetailDrawer from '../../../components/alumni/StudentDetailDrawer';
 import { formatDate } from '../../../components/crm/academic-years';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface StudentRow {
   id: string;
@@ -273,7 +273,7 @@ export default function SoftwarePage() {
               >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
                   <Checkbox size="small" checked={checked} onClick={(e) => e.stopPropagation()} onChange={() => toggleOne(s.id)} sx={{ p: 0.25, mt: -0.25 }} />
-                  <UserAvatar src={s.avatar_url} name={s.name} size={40} tapToView={false} />
+                  <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={40} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={700} color={INK} noWrap>
                       {s.name || 'Unnamed'}
@@ -326,7 +326,7 @@ export default function SoftwarePage() {
               >
                 <Checkbox size="small" checked={checked} onClick={(e) => e.stopPropagation()} onChange={() => toggleOne(s.id)} sx={{ p: 0.5, ml: '-3px' }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, pr: 1 }}>
-                  <UserAvatar src={s.avatar_url} name={s.name} size={34} tapToView={false} />
+                  <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={34} />
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={600} color={INK} noWrap>
                       {s.name || 'Unnamed'}

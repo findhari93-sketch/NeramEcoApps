@@ -11,6 +11,7 @@ import {
   usernameWithSuffix,
 } from '@neram/auth/student-accounts';
 import { actingAdminId } from '@/lib/fee-request';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /** GET ?username=Radhika_Bhanuprakash: is that login ID free? Suggests the next free one when not. */
 export async function GET(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
   const upn = upnFor(username, defaults.domain);
   const free = await isUpnAvailable(upn);
   if (!free.ok) {
-    return NextResponse.json({ error: free.error.fix ? `${free.error.message} ${free.error.fix}` : free.error.message }, { status: 502 });
+    return NextResponse.json({ error: free.error.fix ? `${free.error.message} ${free.error.fix}` : free.error.message }, { status: UPSTREAM_FAILED });
   }
   let alternative: string | null = null;
   if (!free.value) {

@@ -174,7 +174,7 @@ export default function PersonPanel({
     <Box component="aside" aria-label={`About ${p.isGuest ? `guest ${p.guestTag}` : p.name}`} sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.75, borderBottom: 1, borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <PersonAvatar isGuest={p.isGuest} initials={p.initials} src={p.avatarUrl} enrolled={p.enrolled} size={48} />
+          <PersonAvatar isGuest={p.isGuest} userId={p.userId} name={p.name} src={p.avatarUrl} enrolled={p.enrolled} size={48} />
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25 }}>{p.isGuest ? `Guest ${p.guestTag}` : p.name}</Typography>
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>

@@ -25,6 +25,7 @@ import {
 import { enrollUser, getCurrentClassroom, recordUserHistory } from '@neram/database';
 import { sendClassAccountWelcomeEmail } from '@neram/database/class-account';
 import { surnameFrom } from '@neram/database/person-name';
+import { examYearFromAcademicYear } from '@neram/database/academic-year';
 
 const STAFF_TYPES = new Set(['admin', 'teacher']);
 const OWN_DOMAIN = /@(neramclasses\.com|neramclasses\.onmicrosoft\.com)$/i;
@@ -64,7 +65,7 @@ async function namesOnFile(supabase: any, userId: string): Promise<string[]> {
 export async function readClassAccountStudent(supabase: any, userId: string): Promise<ClassAccountStudent | null> {
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, name, first_name, last_name, phone, email, personal_email, ms_oid, user_type, staff_role')
+    .select('id, name, first_name, last_name, phone, email, personal_email, ms_oid, user_type, staff_role, academic_year')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -72,7 +73,7 @@ export async function readClassAccountStudent(supabase: any, userId: string): Pr
 
   const { data: lead } = await supabase
     .from('lead_profiles')
-    .select('father_name')
+    .select('father_name, target_exam_year, city, state, country')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -106,6 +107,11 @@ export async function readClassAccountStudent(supabase: any, userId: string): Pr
     msOid: user.ms_oid ?? null,
     isStaff: !!user.staff_role || STAFF_TYPES.has(String(user.user_type || '')),
     isStudent: user.user_type === 'student',
+    // The cohort staff set wins over what the form said ('2027-28' writes in 2028).
+    examYear: examYearFromAcademicYear(user.academic_year) ?? (Number(lead?.target_exam_year) || null),
+    city: lead?.city?.trim() || null,
+    state: lead?.state?.trim() || null,
+    country: lead?.country?.trim() || null,
   };
 }
 
@@ -225,7 +231,8 @@ export function createClassAccountPorts(supabase: any, actorId: string): ClassAc
         if (result.team && !result.team.success) {
           return {
             status: 'failed',
-            reason: 'Not in the class Team yet. A brand new account can take a few minutes to reach Microsoft Teams. Retry in 5 minutes.',
+            // When to retry is the card's line under the step (components/class-account/auto-retry.ts).
+            reason: 'Not in the class Team yet. A brand new account can take a few minutes to reach Microsoft Teams.',
           };
         }
         // The student group chat is added in the same run. Both adds are safe to repeat,
@@ -234,8 +241,8 @@ export function createClassAccountPorts(supabase: any, actorId: string): ClassAc
           return {
             status: 'failed',
             reason: result.team
-              ? 'In the class Team, but not in the student group chat yet. Retry in 5 minutes, or add them from the group chat in Teams.'
-              : 'Not in the student group chat yet. Retry in 5 minutes, or add them from the group chat in Teams.',
+              ? 'In the class Team, but not in the student group chat yet. You can also add them from the group chat in Teams.'
+              : 'Not in the student group chat yet. You can also add them from the group chat in Teams.',
           };
         }
         if (!result.team && !result.groupChat) return { status: 'skipped', reason: 'This classroom has no linked Microsoft Team.' };

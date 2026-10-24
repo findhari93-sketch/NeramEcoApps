@@ -10,6 +10,8 @@ import {
   BADGE_MIN_GAP_MS,
   collectionsBadgeCount,
   istTodayKey,
+  demoBadgeQuery,
+  DEMO_DESK_DAYS,
 } from './admin-badges';
 
 describe('normalizeBadgeCounts', () => {
@@ -100,5 +102,20 @@ describe('collections badge', () => {
     expect(istTodayKey(new Date('2026-10-16T17:30:00Z'))).toBe('2026-10-16');
     // 2026-10-16 18:30 UTC is midnight, 17 Oct in India.
     expect(istTodayKey(new Date('2026-10-16T18:30:00Z'))).toBe('2026-10-17');
+  });
+});
+
+describe('demoBadgeQuery', () => {
+  const now = new Date('2026-10-24T06:00:00.000Z');
+
+  it('uses the desk window, 120 days back', () => {
+    expect(DEMO_DESK_DAYS).toBe(120);
+    expect(demoBadgeQuery(now).since).toBe('2026-06-26T06:00:00.000Z');
+  });
+
+  it('counts new requests and Try later requests that are due again', () => {
+    expect(demoBadgeQuery(now).statusFilter).toBe(
+      'status.eq.pending,and(status.eq.contacted,last_call_outcome.eq.later,next_contact_at.lte.2026-10-24T06:00:00.000Z)',
+    );
   });
 });

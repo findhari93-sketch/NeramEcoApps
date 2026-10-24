@@ -607,7 +607,8 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         { error: 'AI service temporarily unavailable. Please try again in a moment.', humanHelp: true },
-        { status: 502 }
+        // Not 502: Cloudflare would swap it for its own page and lose humanHelp.
+        { status: 424 }
       );
     }
 

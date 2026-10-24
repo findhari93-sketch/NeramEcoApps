@@ -206,12 +206,12 @@ describe('college-outreach send route — multiple recipients', () => {
     expect(loggedRow.error_message).toContain('b@y.com');
   });
 
-  it('returns 502 and does NOT advance the college when all sends fail', async () => {
+  it('returns 424 and does NOT advance the college when all sends fail', async () => {
     sendMock.mockImplementation(async () => ({ success: false, error: 'resend down' }));
     const res = await POST(makeReq({ college_id: 'col-1', override_to_email: 'a@x.com, b@y.com' }));
     const json = await res.json();
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(424);
     expect(json.success).toBe(false);
     expect(updatedPayload).toBeNull(); // colleges.update never called
     expect(loggedRow.status).toBe('failed');

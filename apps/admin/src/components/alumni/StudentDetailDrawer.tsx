@@ -6,7 +6,6 @@ import {
   Drawer,
   Box,
   Typography,
-  UserAvatar,
   Chip,
   IconButton,
   Button,
@@ -26,6 +25,7 @@ import MergeDuplicatePanel from './MergeDuplicatePanel';
 import PersonalDetailsPanel from './PersonalDetailsPanel';
 import ApplicationDetailsPanel from './ApplicationDetailsPanel';
 import { ACCENT, INK, MUTED, LINE } from './theme';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import { formatDate } from '../crm/academic-years';
 
 interface StudentLite {
@@ -108,7 +108,7 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
       <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: LINE, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
         {student ? (
           <>
-            <UserAvatar src={student.avatar_url} name={student.name} size={52} />
+            <PersonAvatar userId={student.id} src={student.avatar_url} name={student.name} size={52} tapToView />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="h6" fontWeight={800} color={INK} noWrap>
                 {student.name || 'Unnamed'}

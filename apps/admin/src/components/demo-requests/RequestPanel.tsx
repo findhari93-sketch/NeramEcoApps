@@ -73,6 +73,8 @@ import { formatLaterDate, laterEmailRecipient, laterFamilyMessage } from '@/lib/
 import { marketingOriginFor } from '@/lib/marketing-links';
 import { guestsWhoJoined, hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
+import DemoPersonAvatar from './DemoPersonAvatar';
+import LanguageChip from '@/components/person/LanguageChip';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
 
 /** Page codes the demo booking stores for its entry points (marketing DemoBookingCard). */
@@ -411,7 +413,8 @@ export default function RequestPanel({
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 2 }} aria-label={`Demo request ${r.ref_code}`}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <DemoPersonAvatar request={r} size={48} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h6" component="h2" fontWeight={700} sx={{ lineHeight: 1.3 }}>
             {r.name}
@@ -421,6 +424,8 @@ export default function RequestPanel({
             {parentAccount && (
               <Chip size="small" variant="outlined" icon={<FamilyRestroomIcon />} label="Parent's account" />
             )}
+            {/* Language belongs to the student, so only on their own account. */}
+            {r.user_id && !parentAccount && <LanguageChip userId={r.user_id} />}
             <Typography variant="body2" color="text.secondary">
               {r.ref_code} · requested {ago(r.created_at, now)}
             </Typography>

@@ -48,6 +48,7 @@ import SetAcademicYearDialog from '@/components/crm/SetAcademicYearDialog';
 import MarkStaffDialog from '@/components/alumni/MarkStaffDialog';
 import { useBatches } from '@/contexts/BatchContext';
 import { currentAcademicYear } from '@/components/crm/academic-years';
+import AvatarKey from '@/components/person/AvatarKey';
 
 // StudentRow is defined once in StudentHubTable (the table consumer) and imported
 // here so the page state, the table, and its row-click callbacks all share one type.
@@ -866,7 +867,8 @@ export default function StudentsPage() {
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <AvatarKey />
           <Button
             size="small"
             variant={view === 'revenue' ? 'contained' : 'outlined'}

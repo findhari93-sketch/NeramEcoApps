@@ -12,7 +12,6 @@ import {
   useMaterialReactTable,
 } from 'material-react-table';
 import {
-  UserAvatar,
   Box,
   Button,
   Chip,
@@ -30,6 +29,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import CopyablePhone from '@/components/CopyablePhone';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import {
   APPLICATION_STATE_LABEL,
@@ -302,7 +302,7 @@ export default function StudentHubTable({
           const display = s.name || [s.first_name, s.last_name].filter(Boolean).join(' ') || 'Unnamed';
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <UserAvatar src={s.avatar_url} name={display} size={28} tapToView={false} />
+              <PersonAvatar userId={s.user_id} src={s.avatar_url} name={display} size={28} />
               <Box sx={{ minWidth: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>
                   {display}

@@ -5,7 +5,7 @@
  * order per queue). Skeleton rows while loading, an empty state per queue, and
  * Load more at the bottom.
  */
-import { Avatar, Box, Button, CircularProgress, Tooltip, Typography } from '@neram/ui';
+import { Box, Button, CircularProgress, Tooltip, Typography } from '@neram/ui';
 import InboxIcon from '@mui/icons-material/Inbox';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -19,7 +19,8 @@ import {
 } from '@neram/database/support-ticket-status';
 import { EmptyState, OpsSkeleton } from '@/components/ops/OpsUi';
 import { timeAgo } from '@/lib/support-inbox/timeline';
-import { SegmentChip, initialsOf } from './bits';
+import { SegmentChip } from './bits';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 const EMPTY: Record<SupportTicketQueue, { title: string; body: string }> = {
   new: { title: 'No new tickets', body: 'Everything that came in has been picked up.' },
@@ -205,9 +206,9 @@ export function TicketList({
                 </Typography>
                 {t.assignee_name ? (
                   <Tooltip title={`Assigned to ${t.assignee_name}`}>
-                    <Avatar aria-label={`Assigned to ${t.assignee_name}`} sx={{ width: 26, height: 26, fontSize: 11, bgcolor: 'primary.main' }}>
-                      {initialsOf(t.assignee_name)}
-                    </Avatar>
+                    <span aria-label={`Assigned to ${t.assignee_name}`}>
+                      <PersonAvatar name={t.assignee_name} size={20} ring="staff" hideLanguage tooltip={false} />
+                    </span>
                   </Tooltip>
                 ) : (
                   <Typography component="span" sx={{ fontSize: 11, color: 'text.secondary' }}>

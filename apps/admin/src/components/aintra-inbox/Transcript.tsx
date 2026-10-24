@@ -561,7 +561,7 @@ export default function Transcript({
       )}
       {c ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <PersonAvatar isGuest={c.isGuest} initials={c.initials} src={c.avatarUrl} enrolled={c.enrolled} size={44} />
+          <PersonAvatar isGuest={c.isGuest} userId={c.userId} name={c.name} src={c.avatarUrl} enrolled={c.enrolled} size={44} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700 }}>

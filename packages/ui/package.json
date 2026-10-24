@@ -13,6 +13,7 @@
     "./components": "./src/components/index.tsx",
     "./hooks": "./src/hooks/index.ts",
     "./utils": "./src/utils/index.ts",
+    "./language": "./src/language/languages.ts",
     "./analytics": "./src/analytics/index.ts",
     "./chat-stream": "./src/chat/stream.ts",
     "./chat-text": "./src/chat/InlineMarkdown.tsx",

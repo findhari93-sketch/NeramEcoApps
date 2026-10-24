@@ -5,11 +5,11 @@
  * section labels and date formatting. Colours come from the @neram/ui theme.
  */
 import type { ReactNode } from 'react';
-import { Avatar, Box, Paper, Typography } from '@neram/ui';
+import { AVATAR_RING_EXTRA, Avatar, AvatarRing, Box, Paper, Tooltip, Typography } from '@neram/ui';
 import PersonIcon from '@mui/icons-material/Person';
 import { alpha, type Theme } from '@mui/material/styles';
 import { channelLabel } from '@neram/database/analytics';
-import { GoldRing } from '@/components/EnrolledAvatar';
+import SharedPersonAvatar from '@/components/person/PersonAvatar';
 import type { LeadStage, TurnStatus } from '@/lib/aintra-inbox/types';
 
 const IST = 'Asia/Kolkata';
@@ -105,40 +105,53 @@ export const STAGE_TONE: Record<LeadStage, { color: string }> = {
   Unknown: { color: 'text.secondary' },
 };
 
-/** Guests get a grey person icon; signed-in people their photo or initials; enrolled students the gold ring. */
+/**
+ * Guests get a grey person icon. Everyone else gets the shared Admin avatar:
+ * photo or initials, the who-is-this ring (gold for an enrolled student) and the
+ * language letter, looked up by userId like every other list in Admin.
+ */
 export function PersonAvatar({
   isGuest,
-  initials,
+  userId,
+  name,
   src,
   enrolled = false,
   size = 36,
 }: {
   isGuest: boolean;
-  initials: string;
+  userId?: string | null;
+  name?: string | null;
   src?: string | null;
   enrolled?: boolean;
   size?: number;
 }) {
   if (isGuest) {
+    // A chat guest is outside the funnel until they sign in: the dotted ring.
+    const inner = size - AVATAR_RING_EXTRA;
     return (
-      <Avatar aria-hidden sx={{ width: size, height: size, bgcolor: 'grey.200', color: 'grey.600' }}>
-        <PersonIcon sx={{ fontSize: size * 0.55 }} />
-      </Avatar>
+      <Tooltip title="Chat guest. Not signed in." arrow disableInteractive>
+        <Box role="img" aria-label="Chat guest. Not signed in." sx={{ display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}>
+          <AvatarRing variant="other" size={inner}>
+            <Avatar aria-hidden sx={{ width: inner, height: inner, bgcolor: 'grey.200', color: 'grey.600' }}>
+              <PersonIcon sx={{ fontSize: inner * 0.55 }} />
+            </Avatar>
+          </AvatarRing>
+        </Box>
+      </Tooltip>
     );
   }
   // The ring adds 6px, so the photo shrinks to keep the overall size the same.
-  const inner = enrolled ? size - 6 : size;
+  // The inbox already knows "enrolled" (the same student_profiles / classroom
+  // account rule), so gold paints at once; anyone else with an account is looked
+  // up, and a person with no account is a lead.
   return (
-    <GoldRing enrolled={enrolled} size={inner}>
-      <Avatar
-        aria-hidden
-        src={src ?? undefined}
-        imgProps={{ loading: 'lazy' }}
-        sx={{ width: inner, height: inner, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: inner * 0.36, fontWeight: 600 }}
-      >
-        {initials || <PersonIcon sx={{ fontSize: inner * 0.55 }} />}
-      </Avatar>
-    </GoldRing>
+    <SharedPersonAvatar
+      userId={userId}
+      name={name}
+      src={src ?? null}
+      size={size - AVATAR_RING_EXTRA}
+      ring={enrolled ? 'student' : userId ? undefined : 'lead'}
+    />
   );
 }
 

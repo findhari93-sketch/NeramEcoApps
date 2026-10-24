@@ -59,7 +59,8 @@ import {
 } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
 import CopyablePhone from '@/components/CopyablePhone';
-import EnrolledAvatar from '@/components/EnrolledAvatar';
+import PersonAvatar from '@/components/person/PersonAvatar';
+import { factsFromJourney } from '@/lib/person-avatar';
 
 interface UsersTableProps {
   data: UserJourney[];
@@ -266,7 +267,6 @@ function MobileUserCard({
   const config = PIPELINE_STAGE_CONFIG[stage];
   const isArchived = user.lifecycle_status === 'archived';
   const isDimmed = user.contacted_status === 'dead_lead' || user.contacted_status === 'irrelevant' || isArchived;
-  const isEnrolled = stage === 'enrolled' || user.linked_classroom_email;
 
   const courseLabels: Record<string, string> = {
     nata: 'NATA',
@@ -291,12 +291,13 @@ function MobileUserCard({
         minHeight: 60,
       }}
     >
-      {/* Avatar: gold ring for enrolled students */}
-      <EnrolledAvatar
+      {/* Avatar: the who-is-this ring (gold for our students) + language letter */}
+      <PersonAvatar
+        userId={user.id}
         src={user.avatar_url}
         name={getDisplayName(user)}
-        size={isEnrolled ? 34 : 40}
-        enrolled={!!isEnrolled}
+        size={40}
+        facts={factsFromJourney(user)}
         sx={{ mt: 0.25 }}
       />
 
@@ -579,11 +580,12 @@ export default function UsersTable(props: UsersTableProps) {
         enableColumnFilter: false,
         Cell: ({ row }) => (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0 }}>
-            <EnrolledAvatar
+            <PersonAvatar
+              userId={row.original.id}
               src={row.original.avatar_url}
               name={getDisplayName(row.original)}
-              size={28}
-              enrolled={row.original.pipeline_stage === 'enrolled' || !!row.original.linked_classroom_email}
+              size={32}
+              facts={factsFromJourney(row.original)}
             />
             <Box sx={{ minWidth: 0 }}>
               <Typography

@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { processCollege } from '@/lib/college-photos/apply';
 import { COLLEGE_PHOTO_COLUMNS, type CollegeForPhotos } from '@/lib/college-photos/types';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,6 +30,6 @@ export async function POST(request: NextRequest) {
     const report = await processCollege(supabase, college as CollegeForPhotos, { force: body.force !== false });
     return NextResponse.json({ success: true, report });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message || 'Photo search failed' }, { status: 502 });
+    return NextResponse.json({ error: (err as Error).message || 'Photo search failed' }, { status: UPSTREAM_FAILED });
   }
 }

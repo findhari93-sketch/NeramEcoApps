@@ -43,6 +43,7 @@ import AutoArchiveBar from '../../../components/crm/AutoArchiveBar';
 import UnlinkedParentsBar from '../../../components/crm/UnlinkedParentsBar';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { useBatches } from '@/contexts/BatchContext';
+import AvatarKey from '@/components/person/AvatarKey';
 
 type LifecycleView = 'active' | 'archived';
 type IdentityFilter = 'firebase' | 'microsoft' | 'all';
@@ -595,6 +596,7 @@ export default function CRMPage() {
             })}
           </Box>
 
+          <AvatarKey />
           <Tooltip title="Refresh data">
             <span>
               <IconButton size="small" onClick={refreshAll} disabled={loading} aria-label="Refresh">

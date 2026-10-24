@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
-  UserAvatar,
   Chip,
   Paper,
   Card,
@@ -42,6 +41,7 @@ import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { academicYearOptions } from '../../../../components/crm/academic-years';
 import AlumniEditDialog from '../../../../components/alumni/AlumniEditDialog';
 import { ACCENT, ACCENT_SOFT, INK, MUTED, LINE } from '../../../../components/alumni/theme';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface GalleryItem {
   id: string;
@@ -381,7 +381,7 @@ export default function AlumniGalleryPage() {
                   }}
                 >
                   <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-                    <UserAvatar src={s.avatar_url} name={s.name} size={44} />
+                    <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={44} facts={{ isAlumni: true }} tapToView />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
@@ -521,7 +521,7 @@ export default function AlumniGalleryPage() {
                   />
                   <Box sx={{ p: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <UserAvatar src={item.student?.avatar_url} name={item.student?.name} size={28} />
+                      <PersonAvatar userId={item.student?.id} src={item.student?.avatar_url} name={item.student?.name} size={28} tapToView />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} noWrap>
                           {item.student?.name || 'Unknown'}

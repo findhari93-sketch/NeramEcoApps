@@ -2,7 +2,7 @@
 
 import { forwardRef, type ElementType } from 'react';
 import Link from 'next/link';
-import { Box, Paper, Typography, Button, Divider, UserAvatar, Checkbox, CircularProgress } from '@neram/ui';
+import { Box, Paper, Typography, Button, Divider, Checkbox, CircularProgress } from '@neram/ui';
 import {
   describeBlockedReason,
   describeDuplicateEvidence,
@@ -25,6 +25,7 @@ import UndoIcon from '@mui/icons-material/Undo';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { formatIstDate } from '@/lib/ops-format';
 import { StatusChip, SignInChips, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import type { CandidatePerson, DuplicateRelation, QueuePair, DuplicateTab } from './types';
 
 const RELATION_ICON: Record<DuplicateRelation, ElementType> = {
@@ -121,7 +122,7 @@ function PersonColumn({
   return (
     <Box sx={{ flex: 1, minWidth: 0, p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
-        <UserAvatar src={person.avatar_url} name={name} size={32} tapToView={false} />
+        <PersonAvatar userId={person.id} src={person.avatar_url} name={name} size={32} />
         <Box sx={{ minWidth: 0 }}>
           {gone ? (
             <Typography variant="body2" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>

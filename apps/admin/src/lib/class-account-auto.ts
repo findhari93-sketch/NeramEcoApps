@@ -7,9 +7,10 @@
  *   - a job every 10 minutes for anyone who has not opened it (/api/cron/class-accounts).
  * Staff can still make or fix one from the Class account card; this never undoes theirs.
  *
- * The Class Team step is not retried here: the card and Nexus finish it.
+ * The same job finishes a made account whose later step failed (finishClassAccount),
+ * mostly the Class Team on a brand new account, so nobody has to press Retry.
  */
-import { emptySteps, provisionClassAccount, suggestClassUsername, upnFor } from '@neram/auth/student-accounts';
+import { CLASS_STEP_KEYS, emptySteps, provisionClassAccount, suggestClassUsername, upnFor } from '@neram/auth/student-accounts';
 import { createClassAccountPorts } from './class-account-store';
 
 /** A run that has not saved anything for this long has stopped; another may take over. */
@@ -66,6 +67,11 @@ export async function claimRun(supabase: any, userId: string, upn: string, actor
     .insert({ user_id: userId, upn, steps: emptySteps(), created_by: actorId });
   if (!error) return true;
   if (error.code !== '23505') throw error;
+  return takeLease(supabase, userId, now);
+}
+
+/** Take a setup row nobody has saved for RUN_LEASE_MS. */
+export async function takeLease(supabase: any, userId: string, now: number): Promise<boolean> {
   const { data, error: leaseError } = await supabase
     .from('class_account_setups')
     .update({ updated_at: new Date(now).toISOString() })
@@ -107,4 +113,18 @@ export async function autoProvisionClassAccount(supabase: any, userId: string, n
     return { status: 'failed', message: result.error };
   }
   return { status: 'failed', message: `Every login ID from ${base} to ${base}${ID_TRIES} is taken. Pick one on the Class account card.` };
+}
+
+/** Redo the failed steps of an account that exists. Done steps (and the welcome email) are never redone. */
+export async function finishClassAccount(supabase: any, userId: string, now = Date.now()): Promise<AutoResult> {
+  const { data: setup } = await supabase.from('class_account_setups').select('created_by, steps').eq('user_id', userId).maybeSingle();
+  if (setup?.steps?.account?.status !== 'done') return { status: 'not_enrolled' };
+  if (!(await takeLease(supabase, userId, now))) return { status: 'working' };
+
+  const actorId = setup.created_by || (await approverFor(supabase, userId)) || userId;
+  const result = await provisionClassAccount(createClassAccountPorts(supabase, actorId), { userId, actorId });
+  if (result.kind === 'graph_failed') return { status: 'failed', message: result.error.message };
+  if (result.kind !== 'ok') return { status: 'failed', message: result.error };
+  const left = CLASS_STEP_KEYS.filter((k) => result.setup.steps[k]?.status === 'failed');
+  return left.length ? { status: 'failed', message: `Still failing: ${left.join(', ')}` } : { status: 'ready', upn: result.setup.upn };
 }

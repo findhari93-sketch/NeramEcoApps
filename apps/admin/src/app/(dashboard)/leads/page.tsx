@@ -375,6 +375,7 @@ export default function LeadsPage() {
               sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
             />
           )}
+          <AvatarKey />
           <Tooltip title="Refresh data">
             <span>
               <IconButton size="small" onClick={() => { fetchLeads(); fetchStudentMatches(); }} disabled={loading}>
@@ -550,6 +551,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { Skeleton } from '@neram/ui';
+import AvatarKey from '@/components/person/AvatarKey';
 
 const LEAD_STAGE_ICONS: Record<string, React.ElementType> = {
   new_lead: FiberNewIcon,

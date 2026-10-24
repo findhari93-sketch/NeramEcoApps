@@ -9,7 +9,6 @@ import {
   TextField,
   MenuItem,
   InputAdornment,
-  UserAvatar,
   Chip,
   Paper,
   Card,
@@ -49,6 +48,7 @@ import MarkStaffDialog from '../../../components/alumni/MarkStaffDialog';
 import AlumniAddDrawer from '../../../components/alumni/AlumniAddDrawer';
 import { academicYearOptions, currentAcademicYear, formatDate } from '../../../components/crm/academic-years';
 import { useBatches } from '@/contexts/BatchContext';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface StudentRow {
   id: string;
@@ -774,7 +774,7 @@ export default function AlumniPage() {
                         onChange={() => toggleStudent(s.id)}
                         sx={{ p: 0.25, mt: -0.25 }}
                       />
-                      <UserAvatar src={s.avatar_url} name={s.name} size={40} tapToView={false} />
+                      <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={40} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -841,7 +841,7 @@ export default function AlumniPage() {
                       sx={{ p: 0.5, ml: '-3px' }}
                     />
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, pr: 1 }}>
-                      <UserAvatar src={s.avatar_url} name={s.name} size={34} tapToView={false} />
+                      <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={34} />
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -967,7 +967,7 @@ export default function AlumniPage() {
                   }}
                 >
                   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <UserAvatar src={a.avatar_url} name={a.name} size={44} tapToView={false} />
+                    <PersonAvatar userId={a.id} src={a.avatar_url} name={a.name} size={44} facts={{ isAlumni: true }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>

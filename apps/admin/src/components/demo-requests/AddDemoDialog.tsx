@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Autocomplete,
@@ -103,6 +103,9 @@ export default function AddDemoDialog({
   const [parentAccount, setParentAccount] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** People the server thinks this may already be (asked before adding a new person). */
+  const [matches, setMatches] = useState<Person[] | null>(null);
+  const matchesRef = useRef<HTMLDivElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -127,6 +130,7 @@ export default function AddDemoDialog({
     setWindow('anytime');
     setSendAck(true);
     setError(null);
+    setMatches(null);
     setTouched({});
     // Reset only when the dialog opens; the team list is read once per open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,6 +186,28 @@ export default function AddDemoDialog({
     if (p?.open_request && mode === 'request') setMode('held');
   };
 
+  // A changed name or number is a new question; the old matches no longer apply.
+  useEffect(() => {
+    setMatches(null);
+  }, [name, phone]);
+
+  // Bring the question into view, so it is not missed below the fold.
+  useEffect(() => {
+    if (matches?.length) matchesRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [matches]);
+
+  /** Link the demo to a matched person. A family number staff typed stays, as the parent's mobile. */
+  const linkMatch = (p: Person) => {
+    const typedPhone = phone;
+    const typedParentName = parentName;
+    pick(p);
+    setQuery(p.name || p.phone || '');
+    if (p.matched?.reason === 'family_number' && !p.is_parent_account) {
+      setParentPhone(typedPhone);
+      setParentName(typedParentName);
+    }
+  };
+
   const toggleParentAccount = (on: boolean) => {
     setParentAccount(on);
     if (person) fillFrom(person, on);
@@ -211,7 +237,7 @@ export default function AddDemoDialog({
     (mode !== 'held' || heldCheck.ok) &&
     (mode !== 'planned' || (plannedCheck.ok && settings.hosts.length > 0));
 
-  const save = async () => {
+  const save = async (addAsNew = false) => {
     setTouched({ name: true, phone: true, examYear: true });
     if (!canSave) return;
     setSaving(true);
@@ -223,6 +249,7 @@ export default function AddDemoDialog({
         body: JSON.stringify({
           mode,
           userId: person?.id,
+          addAsNew,
           accountHolder: person && parentAccount ? 'parent' : 'student',
           name: name.trim(),
           phone,
@@ -238,6 +265,10 @@ export default function AddDemoDialog({
         }),
       });
       const d = await res.json();
+      if (res.status === 409 && d.code === 'possible_match' && Array.isArray(d.matches)) {
+        setMatches(d.matches as Person[]);
+        return;
+      }
       if (!res.ok) throw new Error(d.error || 'Could not add the demo.');
       onAdded(d.id, mode, !!d.confirmError);
     } catch (e) {
@@ -275,6 +306,11 @@ export default function AddDemoDialog({
               <Typography variant="caption" color="text.secondary" component="p">
                 {[o.phone, o.email, o.is_parent_account ? TYPE_LABEL.parent : TYPE_LABEL[o.user_type] || o.user_type].filter(Boolean).join(' · ')}
               </Typography>
+              {o.matched && o.matched.reason !== 'same_name' && (
+                <Typography variant="caption" color="text.primary" fontWeight={600} component="p">
+                  {o.matched.label} {o.matched.number}
+                </Typography>
+              )}
               {o.open_request && (
                 <Typography variant="caption" color="info.main" component="p">
                   Open demo request {o.open_request.ref_code}
@@ -517,6 +553,63 @@ export default function AddDemoDialog({
           </Box>
         )}
 
+        {!!matches?.length && (
+          <Box
+            ref={matchesRef}
+            role="region"
+            aria-labelledby="add-demo-matches-title"
+            data-testid="add-demo-matches"
+            sx={{ mt: 2, p: 2, border: 1, borderColor: 'primary.main', borderRadius: 2, bgcolor: 'action.hover' }}
+          >
+            <Typography id="add-demo-matches-title" component="h3" variant="subtitle1" fontWeight={700} role="alert">
+              Already in People?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              This number or name matches someone we already have. Link the demo to them so they do not get a second record.
+            </Typography>
+            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1 }}>
+              {matches.map((m) => (
+                <Box
+                  component="li"
+                  key={m.id}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    p: 1.5,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="body2" fontWeight={600}>
+                      {m.name || 'No name'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" component="p">
+                      {[m.phone, m.email, m.is_parent_account ? TYPE_LABEL.parent : TYPE_LABEL[m.user_type] || m.user_type]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Typography>
+                    {m.matched && (
+                      <Typography variant="caption" color="text.primary" fontWeight={600} component="p">
+                        {m.matched.reason === 'same_name' ? 'Same name' : `${m.matched.label} ${m.matched.number ?? ''}`.trim()}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Button variant="outlined" onClick={() => linkMatch(m)} disabled={saving} sx={{ minHeight: 44, flexShrink: 0 }}>
+                    Use this person
+                  </Button>
+                </Box>
+              ))}
+            </Box>
+            <Button onClick={() => save(true)} disabled={saving} sx={{ mt: 1.5, minHeight: 44 }}>
+              No, add {name.trim() || 'them'} as a new person
+            </Button>
+          </Box>
+        )}
+
         {error && (
           <Alert severity="error" sx={{ mt: 2 }} role="alert">
             {error}
@@ -529,7 +622,7 @@ export default function AddDemoDialog({
         </Button>
         <Button
           variant="contained"
-          onClick={save}
+          onClick={() => save()}
           disabled={saving || !canSave}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
           sx={{ minHeight: 44 }}

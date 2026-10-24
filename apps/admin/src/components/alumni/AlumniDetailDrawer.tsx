@@ -6,7 +6,6 @@ import {
   Drawer,
   Box,
   Typography,
-  UserAvatar,
   Chip,
   IconButton,
   Button,
@@ -31,6 +30,7 @@ import AlumniEditDialog from './AlumniEditDialog';
 import AlumniExamRecords from './AlumniExamRecords';
 import AlumniMsSection from './AlumniMsSection';
 import StudentWorksPanel from './StudentWorksPanel';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import MergeDuplicatePanel from './MergeDuplicatePanel';
 import PersonalDetailsPanel from './PersonalDetailsPanel';
 import { ACCENT, ACCENT_SOFT, INK, MUTED, LINE, yearOfStudyLabel, isGraduateArchitect } from './theme';
@@ -112,7 +112,7 @@ export default function AlumniDetailDrawer({ open, userId, adminId, onClose, onC
             </Box>
           ) : (
             <>
-              <UserAvatar src={user.avatar_url} name={user.name} size={52} />
+              <PersonAvatar userId={userId} src={user.avatar_url} name={user.name} size={52} tapToView />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="h6" fontWeight={800} color={INK} noWrap>
                   {user.name || 'Unnamed'}

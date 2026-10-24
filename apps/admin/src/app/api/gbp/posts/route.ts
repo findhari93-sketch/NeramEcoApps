@@ -14,6 +14,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { stripDashes, successPostText } from '@/lib/gbp/core';
 import { NOT_CONNECTED_MESSAGE, getGbpClient } from '@/lib/gbp/server';
 import { getRequestAdminId } from '@/lib/request-admin';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const noStore = { 'Cache-Control': 'no-store' };
 const EXAM: Record<string, string> = { NATA: 'NATA', JEE_PAPER_2: 'JEE Paper 2', BOTH: 'NATA and JEE Paper 2' };
@@ -116,6 +117,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ post: done });
   } catch (e: any) {
     await supabase.from('gbp_local_posts').update({ status: 'failed', error: String(e?.message || e).slice(0, 500) }).eq('id', post.id);
-    return NextResponse.json({ error: `Google did not accept the post: ${e?.message || 'unknown error'}` }, { status: 502 });
+    return NextResponse.json({ error: `Google did not accept the post: ${e?.message || 'unknown error'}` }, { status: UPSTREAM_FAILED });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AiBlockedError, generateGeminiText } from '@neram/ai';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * Polish an admin's rough knowledge base correction into publishable copy.
@@ -62,11 +63,11 @@ export async function POST(request: NextRequest) {
         );
       }
       console.error('[AintraRefine] Gemini error:', err);
-      return NextResponse.json({ error: 'Gemini API error' }, { status: 502 });
+      return NextResponse.json({ error: 'Gemini API error' }, { status: UPSTREAM_FAILED });
     }
 
     if (!refined.trim()) {
-      return NextResponse.json({ error: 'No response from AI' }, { status: 502 });
+      return NextResponse.json({ error: 'No response from AI' }, { status: UPSTREAM_FAILED });
     }
 
     return NextResponse.json({ refined: refined.trim() });

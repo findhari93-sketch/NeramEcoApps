@@ -31,13 +31,13 @@ describe('languageKeyOf', () => {
   });
 
   it('reads a retired or mistyped word as English rather than throwing', () => {
-    expect(languageKeyOf('telugu')).toBe('english');
+    expect(languageKeyOf('marathi')).toBe('english');
     expect(languageKeyOf('Tamil')).toBe('english');
   });
 });
 
 describe('isLanguageValue / isHomeLanguageValue', () => {
-  it('accepts exactly the five keys', () => {
+  it('accepts exactly the six keys', () => {
     for (const key of LANGUAGE_ORDER) expect(isLanguageValue(key)).toBe(true);
   });
 
@@ -139,6 +139,7 @@ describe('countLanguages', () => {
       hindi: 1,
       kannada: 0,
       malayalam: 0,
+      telugu: 0,
       english: 2,
     });
   });
@@ -149,6 +150,7 @@ describe('countLanguages', () => {
       hindi: 0,
       kannada: 0,
       malayalam: 0,
+      telugu: 0,
       english: 0,
     });
   });
@@ -201,6 +203,7 @@ describe('the marks', () => {
   it('uses a Latin initial for the scripts nobody here reads', () => {
     expect(LANGUAGES.kannada.mark).toBe('K');
     expect(LANGUAGES.malayalam.mark).toBe('M');
+    expect(LANGUAGES.telugu.mark).toBe('T');
   });
 
   it('gives every language exactly one character, so the disc stays legible', () => {

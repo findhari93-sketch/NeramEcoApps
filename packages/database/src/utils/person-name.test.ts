@@ -22,6 +22,11 @@ describe('surnameFrom', () => {
     expect(surnameFrom('Aisha', ['Aisha K', 'Aisha Eshal Khan'])).toBe('Eshal Khan');
   });
 
+  it('never repeats a word the first name already holds', () => {
+    expect(surnameFrom('Jeshurun Winsley B', ['Jeshurun Winsley'])).toBeNull();
+    expect(surnameFrom('Jeshurun Winsley', ['Jeshurun Winsley Benjamin'])).toBe('Benjamin');
+  });
+
   it('is null when nothing beyond the first name is known', () => {
     expect(surnameFrom('Radhika', ['Radhika', null, ''])).toBeNull();
     expect(surnameFrom('', ['Kunisetty Radhika'])).toBeNull();

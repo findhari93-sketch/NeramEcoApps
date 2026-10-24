@@ -176,8 +176,10 @@ export async function readDemoTeams(input: {
 export async function demoRecordingPlayUrl(driveId: string, itemId: string): Promise<string | null> {
   if (isDemoTeamsDryRun()) return null;
   const token = await getAppOnlyToken();
+  // No $select: Graph answers a $select with only the named fields and drops
+  // the download link, even when $select names @microsoft.graph.downloadUrl.
   const res = await graph(
-    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,@microsoft.graph.downloadUrl`,
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}`,
     { token, method: 'GET' },
   );
   if (!res.ok) return null;

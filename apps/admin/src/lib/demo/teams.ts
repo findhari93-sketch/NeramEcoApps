@@ -13,6 +13,7 @@
  */
 
 import { getAppOnlyToken } from '@neram/auth';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
@@ -112,7 +113,7 @@ async function explain(res: Response, token: string, upn: string): Promise<DemoT
   if (res.status === 404) {
     return new DemoTeamsError(`No Microsoft mailbox found for ${upn}. Check the host's address in Demo settings.`, 400);
   }
-  return new DemoTeamsError(`Teams meeting could not be saved: ${detail}`, 502);
+  return new DemoTeamsError(`Teams meeting could not be saved: ${detail}`, UPSTREAM_FAILED);
 }
 
 export async function createDemoEvent(input: DemoEventInput, refForDryRun: string): Promise<DemoEventResult> {
@@ -145,7 +146,7 @@ export async function createDemoEvent(input: DemoEventInput, refForDryRun: strin
   if (!joinUrl) {
     throw new DemoTeamsError(
       'The calendar event was created but Teams did not attach a meeting link. Check that the host has a Teams licence.',
-      502,
+      UPSTREAM_FAILED,
     );
   }
   const optionsNote = await applyDemoMeetingOptions(token, input.organizerUpn, joinUrl);

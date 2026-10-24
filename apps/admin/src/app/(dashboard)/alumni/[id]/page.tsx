@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
-  UserAvatar,
   Chip,
   Button,
   IconButton,
@@ -28,6 +27,7 @@ import InstagramIcon from '@mui/icons-material/Instagram';
 import LanguageIcon from '@mui/icons-material/Language';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import AlumniEditDialog from '../../../../components/alumni/AlumniEditDialog';
 import AlumniExamRecords from '../../../../components/alumni/AlumniExamRecords';
 import AlumniMsSection from '../../../../components/alumni/AlumniMsSection';
@@ -198,7 +198,7 @@ export default function AlumniProfilePage() {
 
       {/* Header */}
       <Paper variant="outlined" sx={{ borderRadius: 2, borderColor: LINE, p: { xs: 2, md: 3 }, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-        <UserAvatar src={user.avatar_url} name={user.name} size={72} />
+        <PersonAvatar userId={userId} src={user.avatar_url} name={user.name} size={72} tapToView />
         <Box sx={{ flex: 1, minWidth: 200 }}>
           <Typography variant="h5" fontWeight={800} color={INK}>
             {user.name || 'Unnamed'}

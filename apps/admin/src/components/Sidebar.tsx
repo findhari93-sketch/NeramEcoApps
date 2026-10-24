@@ -11,8 +11,6 @@ import {
   ListItemIcon,
   ListItemText,
   Typography,
-  Avatar,
-  UserAvatar,
   Tooltip,
   IconButton,
   Badge,
@@ -92,6 +90,7 @@ import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useAdminBadges } from '@/contexts/AdminBadgesContext';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 const MOBILE_DRAWER_WIDTH = 280;
@@ -437,7 +436,7 @@ export default function Sidebar() {
               '&:hover': { bgcolor: 'action.hover' },
             }}
           >
-            <UserAvatar name={user?.name || 'Admin'} size={28} />
+            <PersonAvatar name={user?.name || 'Admin'} size={24} ring="staff" hideLanguage tooltip={false} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="caption" fontWeight={600} noWrap sx={{ display: 'block', color: 'text.primary', lineHeight: 1.2 }}>
                 {user?.name || 'Admin'}
@@ -451,17 +450,7 @@ export default function Sidebar() {
         ) : (
           <Tooltip title={`${user?.name || 'Admin'} — menu`} placement="right" arrow>
             <IconButton onClick={(e) => setProfileAnchor(e.currentTarget)} size="small" sx={{ width: 32, height: 32 }}>
-              <Avatar
-                sx={{
-                  width: 28,
-                  height: 28,
-                  fontSize: 12,
-                  bgcolor: '#E5E7EB',
-                  color: '#374151',
-                }}
-              >
-                {user?.name?.charAt(0) || 'A'}
-              </Avatar>
+              <PersonAvatar name={user?.name || 'Admin'} size={22} ring="staff" hideLanguage tooltip={false} />
             </IconButton>
           </Tooltip>
         )}

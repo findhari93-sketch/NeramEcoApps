@@ -342,7 +342,7 @@ export default function ConversationList({
                       '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
                     }}
                   >
-                    <PersonAvatar isGuest={c.isGuest} initials={c.initials} src={c.avatarUrl} enrolled={c.enrolled} />
+                    <PersonAvatar isGuest={c.isGuest} userId={c.userId} name={c.name} src={c.avatarUrl} enrolled={c.enrolled} />
                     <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
                       <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'baseline', minWidth: 0 }}>
                         <Typography

@@ -21,9 +21,11 @@
 import type { GraphErrorInfo } from '../graph';
 import type { CreateEntraUserInput, GraphResult } from './entra';
 import {
+  STUDENT_JOB_TITLE,
   isValidUsername,
   normalizeUsername,
   startPassword,
+  studentDepartment,
   suggestUsernameFromFather,
   upnFor,
   type StudentAccountDefaults,
@@ -61,6 +63,11 @@ export interface ClassAccountStudent {
   msOid: string | null;
   isStaff: boolean;
   isStudent: boolean;
+  /** The exam year (2028), which names the department staff set: NNE28. */
+  examYear?: number | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
 }
 
 export interface ClassAccountGraphPort {
@@ -235,6 +242,12 @@ export async function provisionClassAccount(
           mailNickname: setup.upn.split('@')[0],
           mobilePhone: student.phone ? `+91 ${student.phone}` : null,
           usageLocation: defaults.usage_location,
+          // As staff filled it by hand: Student, NNE28, and the city they live in.
+          jobTitle: STUDENT_JOB_TITLE,
+          department: studentDepartment(student.examYear),
+          city: student.city || null,
+          state: student.state || null,
+          country: student.country || null,
         };
         const start = startPassword(student.firstName);
         let created = start ? await graph.createUser({ ...base, password: start }) : null;

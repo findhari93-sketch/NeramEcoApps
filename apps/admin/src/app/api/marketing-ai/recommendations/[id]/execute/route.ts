@@ -11,6 +11,7 @@ import { executeRecommendation } from '@/lib/marketing-ai/actions';
 import { requireAdminRole } from '@/lib/marketing-ai/guard';
 import { errorResponse } from '@/lib/marketing-ai/http';
 import { agentContext } from '@/lib/marketing-ai/pipeline';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const guard = requireAdminRole(request);
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   try {
     const ctx = await agentContext();
     const outcome = await executeRecommendation({ ...ctx, actor: { type: 'admin', id: guard.adminId } }, params.id);
-    return NextResponse.json(outcome, { status: outcome.status === 'failed' ? 502 : 200 });
+    return NextResponse.json(outcome, { status: outcome.status === 'failed' ? UPSTREAM_FAILED : 200 });
   } catch (err) {
     return errorResponse(err, 'execute');
   }

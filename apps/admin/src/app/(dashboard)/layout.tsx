@@ -11,6 +11,7 @@ import { AdminProfileProvider } from '@/contexts/AdminProfileContext';
 import { BatchProvider } from '@/contexts/BatchContext';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { AdminBadgesProvider } from '@/contexts/AdminBadgesContext';
+import { PersonFactsProvider } from '@/components/person/PersonFactsProvider';
 
 function MobileTopBar() {
   const { setMobileOpen } = useSidebar();
@@ -112,7 +113,9 @@ export default function DashboardLayout({
     <AdminProfileProvider>
       <BatchProvider>
         <SidebarProvider>
-          <DashboardContent>{children}</DashboardContent>
+          <PersonFactsProvider>
+            <DashboardContent>{children}</DashboardContent>
+          </PersonFactsProvider>
         </SidebarProvider>
       </BatchProvider>
     </AdminProfileProvider>

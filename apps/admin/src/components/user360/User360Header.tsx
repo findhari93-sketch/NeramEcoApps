@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Box, Button, Paper, Typography, Tooltip, UserAvatar } from '@neram/ui';
+import { Box, Button, Paper, Typography, Tooltip } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
@@ -17,6 +17,9 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import SupervisorAccountOutlinedIcon from '@mui/icons-material/SupervisorAccountOutlined';
 import CopyablePhone from '@/components/CopyablePhone';
+import PersonAvatar from '@/components/person/PersonAvatar';
+import LanguageChip from '@/components/person/LanguageChip';
+import { factsFromJourney } from '@/lib/person-avatar';
 import {
   LIFECYCLE_STAGE_LABELS,
   LIFECYCLE_STAGE_MEANINGS,
@@ -81,7 +84,14 @@ export default function User360Header({
       </Button>
 
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-        <UserAvatar src={p.avatar_url} name={p.name} size={56} />
+        <PersonAvatar
+          userId={p.id ? String(p.id) : null}
+          src={p.avatar_url}
+          name={p.name}
+          size={56}
+          tapToView
+          facts={factsFromJourney(p)}
+        />
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography component="h1" variant="h5" sx={{ fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
@@ -100,6 +110,7 @@ export default function User360Header({
               <StatusChip icon={<BadgeOutlinedIcon />} label={sentenceCase(String(p.user_type || 'user'))} tone="neutral" />
             )}
             {isDeactivated && <StatusChip icon={<BlockIcon />} label="Deactivated" tone="error" />}
+            {p.id && <LanguageChip userId={String(p.id)} />}
             {engagement && EngIcon && (
               <StatusChip icon={<EngIcon />} label={ENGAGEMENT_LABELS[engagement]} tone={ENGAGEMENT_TONES[engagement]} />
             )}

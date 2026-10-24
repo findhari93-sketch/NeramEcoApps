@@ -12,6 +12,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { stripDashes } from '@/lib/gbp/core';
 import { NOT_CONNECTED_MESSAGE, getGbpClient } from '@/lib/gbp/server';
 import { getRequestAdminId } from '@/lib/request-admin';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const body = await request.json().catch(() => ({}));
@@ -49,6 +50,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ posted: true });
   } catch (e: any) {
     console.error('[gbp] reply', e?.message || e);
-    return NextResponse.json({ error: `Google did not accept the reply: ${e?.message || 'unknown error'}` }, { status: 502 });
+    return NextResponse.json({ error: `Google did not accept the reply: ${e?.message || 'unknown error'}` }, { status: UPSTREAM_FAILED });
   }
 }

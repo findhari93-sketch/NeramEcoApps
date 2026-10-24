@@ -2,6 +2,8 @@ import { randomInt } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import {
   FALLBACK_ACCOUNT_DEFAULTS,
+  studentDepartment,
+  teamsProfileFix,
   TEMP_PASSWORD_ALPHABET,
   buildLoginMessage,
   decodeTokenRoles,
@@ -230,5 +232,51 @@ describe('normalizeAccountDefaults', () => {
       license_group_id: GROUP,
     });
     expect(normalizeAccountDefaults({ sku_id: SKU_A1, license_mode: 'group' }).license_mode).toBe('direct');
+  });
+});
+
+describe('studentDepartment', () => {
+  it('is NNE and the last two digits of the exam year, as staff always typed it', () => {
+    expect(studentDepartment(2028)).toBe('NNE28');
+    expect(studentDepartment(2027)).toBe('NNE27');
+  });
+
+  it('is null when the exam year is unknown or not a year', () => {
+    expect(studentDepartment(null)).toBeNull();
+    expect(studentDepartment(undefined)).toBeNull();
+    expect(studentDepartment(28)).toBeNull();
+    expect(studentDepartment(Number.NaN)).toBeNull();
+  });
+});
+
+describe('teamsProfileFix', () => {
+  const current = { displayName: 'Jeshurun Winsley', jobTitle: 'Student', department: 'NNE28' };
+
+  it('is null for a hand-made account staff already set up', () => {
+    expect(teamsProfileFix({ current, expectedName: 'Jeshurun Winsley B', nameIsOurs: false, examYear: 2028 })).toBeNull();
+  });
+
+  it('never renames a hand-made account', () => {
+    const fix = teamsProfileFix({ current: { ...current, department: null }, expectedName: 'Someone Else', nameIsOurs: false, examYear: 2028 });
+    expect(fix).toEqual({ name: null, jobTitle: null, department: 'NNE28' });
+  });
+
+  it('fills the job title and department a card-made account is missing', () => {
+    const fix = teamsProfileFix({
+      current: { displayName: 'Radhika Kunisetty', jobTitle: null, department: null },
+      expectedName: 'Radhika Kunisetty',
+      nameIsOurs: true,
+      examYear: 2028,
+    });
+    expect(fix).toEqual({ name: null, jobTitle: 'Student', department: 'NNE28' });
+  });
+
+  it('corrects the name only on an account this system made', () => {
+    const fix = teamsProfileFix({ current, expectedName: 'Jeshurun Winsley B', nameIsOurs: true, examYear: 2028 });
+    expect(fix).toEqual({ name: 'Jeshurun Winsley B', jobTitle: null, department: null });
+  });
+
+  it('leaves the department alone when the exam year is unknown', () => {
+    expect(teamsProfileFix({ current: { ...current, department: null }, expectedName: 'x', nameIsOurs: false, examYear: null })).toBeNull();
   });
 });

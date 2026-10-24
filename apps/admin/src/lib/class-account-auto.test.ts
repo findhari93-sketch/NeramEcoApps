@@ -12,7 +12,7 @@ vi.mock('./class-account-store', () => ({
   }),
 }));
 
-import { autoProvisionClassAccount, claimRun, loginIdsToTry, RUN_LEASE_MS } from './class-account-auto';
+import { autoProvisionClassAccount, claimRun, finishClassAccount, loginIdsToTry, RUN_LEASE_MS } from './class-account-auto';
 
 /** users / class_account_setups / links, with the insert and lease update the claim makes. */
 function fakeDb(opts: { user?: any; setup?: any; insertError?: any; leased?: boolean }) {
@@ -75,6 +75,30 @@ describe('autoProvisionClassAccount', () => {
     expect(await autoProvisionClassAccount(fakeDb({ user: { id: 'u1', user_type: 'student' }, setup: { upn: 'a@x', steps: { account: { status: 'done' } } } }).db, 'u1')).toEqual({ status: 'ready', upn: 'a@x' });
     expect(await autoProvisionClassAccount(fakeDb({ user: { id: 'u1', user_type: 'student', ms_oid: 'oid' } }).db, 'u1')).toEqual({ status: 'has_account' });
     expect(await autoProvisionClassAccount(fakeDb({ user: { id: 'u1', user_type: 'student', ms_oid: null }, insertError: { code: '23505' }, leased: false }).db, 'u1')).toEqual({ status: 'working' });
+    expect(provision).not.toHaveBeenCalled();
+  });
+});
+
+describe('finishClassAccount', () => {
+  const made = { created_by: 'staff-1', steps: { account: { status: 'done' }, teams: { status: 'failed' } } };
+  const steps = (teams: string) =>
+    Object.fromEntries(['account', 'licence', 'link', 'classroom', 'teams', 'welcome'].map((k) => [k, { status: k === 'teams' ? teams : 'done' }]));
+
+  it('redoes the failed steps as the staff member who made the account', async () => {
+    provision.mockResolvedValue({ kind: 'ok', setup: { upn: 'Radhika_Bhanuprakash@neramclasses.com', steps: steps('done') } });
+    const { db } = fakeDb({ setup: made, leased: true });
+    expect(await finishClassAccount(db, 'u1')).toEqual({ status: 'ready', upn: 'Radhika_Bhanuprakash@neramclasses.com' });
+    expect(provision).toHaveBeenCalledWith(expect.anything(), { userId: 'u1', actorId: 'staff-1' });
+  });
+
+  it('says which step still fails', async () => {
+    provision.mockResolvedValue({ kind: 'ok', setup: { upn: 'x', steps: steps('failed') } });
+    expect(await finishClassAccount(fakeDb({ setup: made, leased: true }).db, 'u1')).toEqual({ status: 'failed', message: 'Still failing: teams' });
+  });
+
+  it('leaves it while another run holds it, and never makes an account', async () => {
+    expect(await finishClassAccount(fakeDb({ setup: made, leased: false }).db, 'u1')).toEqual({ status: 'working' });
+    expect(await finishClassAccount(fakeDb({ setup: { steps: { account: { status: 'failed' } } } }).db, 'u1')).toEqual({ status: 'not_enrolled' });
     expect(provision).not.toHaveBeenCalled();
   });
 });

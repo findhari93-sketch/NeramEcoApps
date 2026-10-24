@@ -12,6 +12,11 @@
  * Copy for WhatsApp (login ID and setup link, never the password), Resend email,
  * Reset password, and how far the student is in the setup guide.
  *
+ * Once the student signs in, setup is history: the steps fold away and the
+ * hand-over actions (WhatsApp, welcome email) go. An account staff made by hand
+ * before class accounts were automatic needs nothing at all: the card just shows
+ * it, and what Teams shows for them (name, Student, NNE28).
+ *
  * Used on the demo desk (under "Enrolled with the link") and on the person page.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -46,6 +51,7 @@ import LockResetIcon from '@mui/icons-material/LockReset';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { OpsSkeleton as Skeleton } from '@/components/ops/OpsUi';
+import { isNewAccount, nextAutoRetryDelay, teamsRetryNote, TEAMS_AUTO_RETRY_DELAYS_MIN } from './auto-retry';
 
 type StepKey = 'account' | 'licence' | 'link' | 'classroom' | 'teams' | 'welcome';
 interface Step {
@@ -61,6 +67,7 @@ interface View {
     passwordMode: 'start' | 'random';
     steps: Record<StepKey, Step>;
     complete: boolean;
+    accountCreatedAt: string | null;
     passwordChangedAt: string | null;
     passwordResetAt: string | null;
   };
@@ -68,7 +75,11 @@ interface View {
   guide: { count: number; total: number } | null;
   batchGroup: { url: string; source: string; batchLabel: string | null } | null;
   existing: { upn: string | null } | null;
+  origin: 'none' | 'hand' | 'adopted' | 'made';
   teamsName: { givenName: string; surname: string | null; displayName: string };
+  teams: { displayName: string; jobTitle: string | null; department: string | null } | null;
+  department: string | null;
+  teamsFix: { name: string | null; jobTitle: string | null; department: string | null } | null;
   signedInAt: string | null;
   groupChatUrl: string | null;
 }
@@ -112,6 +123,9 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
   // Making a Microsoft account (or adopting one) is costly and sends email: always confirmed first.
   const [confirm, setConfirm] = useState<'create' | 'adopt' | null>(null);
   const [showSteps, setShowSteps] = useState(false);
+  // The card's own retries of the Teams step on a brand new account (see auto-retry.ts).
+  const [autoTries, setAutoTries] = useState(0);
+  const [autoAt, setAutoAt] = useState<number | null>(null);
   const checkSeq = useRef(0);
 
   const load = useCallback(async () => {
@@ -180,6 +194,31 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
     }
   };
 
+  // A new account's Teams step that failed is tried again while the card is open:
+  // at 2, 5 and 10 minutes, then never again until staff press Retry. Paused while
+  // anything else is running; the same POST as Retry, which only redoes failed steps.
+  const teamsAutoRetry =
+    view?.setup?.steps.account.status === 'done' &&
+    view.setup.steps.teams.status === 'failed' &&
+    isNewAccount(view.setup.accountCreatedAt, Date.now());
+  useEffect(() => {
+    const delay = teamsAutoRetry && busy === null ? nextAutoRetryDelay(autoTries) : null;
+    if (delay === null) {
+      setAutoAt(null);
+      return;
+    }
+    setAutoAt(Date.now() + delay);
+    const timer = setTimeout(() => {
+      setAutoTries((n) => n + 1);
+      post(`/api/students/${userId}/class-account`, {}, 'create').then((ok) => {
+        if (ok?.data?.setup?.steps?.teams?.status === 'done') setNotice('Tried again automatically: now in the class Team and group chat.');
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+    // post is recreated every render; the timer must only restart when these change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamsAutoRetry, busy, autoTries, userId]);
+
   if (loading && !view) {
     return (
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }} aria-busy>
@@ -190,7 +229,14 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
   }
   if (loadError || !view) {
     return (
-      <Alert severity="error" action={<Button onClick={load} sx={{ minHeight: 44 }}>Try again</Button>}>
+      <Alert
+        severity="error"
+        action={
+          <Button onClick={load} sx={{ minHeight: 44 }}>
+            Try again
+          </Button>
+        }
+      >
         {loadError || 'Could not load the class account.'}
       </Alert>
     );
@@ -200,6 +246,40 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
   const first = view.student.firstName || 'the student';
   const setup = view.setup;
   const accountDone = setup?.steps.account.status === 'done';
+  const signedIn = !!view.signedInAt;
+
+  // What Teams shows for them, and the one fix when it differs from how staff set students up.
+  const shown = view.teams;
+  const fix = view.teamsFix;
+  const teamsProfile = (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="body2" color="text.secondary">
+        In Teams:{' '}
+        <strong>{[shown?.displayName || view.teamsName.displayName, shown?.jobTitle, shown?.department].filter(Boolean).join(' · ')}</strong>
+        {shown && !shown.department && !view.department && ' (no exam year on file for the department)'}
+      </Typography>
+      {fix && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+          <Typography variant="body2" color="text.secondary">
+            Should be:{' '}
+            {[fix.name || shown?.displayName, fix.jobTitle || shown?.jobTitle, fix.department || shown?.department].filter(Boolean).join(' · ')}
+          </Typography>
+          <Button
+            size="small"
+            onClick={async () => {
+              const ok = await post(`/api/students/${userId}/class-account`, { syncName: true }, 'name');
+              if (ok) setNotice('Teams profile updated. It can take a few minutes to appear in Teams.');
+            }}
+            disabled={busy !== null}
+            startIcon={busy === 'name' ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ minHeight: 36, textTransform: 'none' }}
+          >
+            Update in Teams
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
 
   const header = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
@@ -280,7 +360,13 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
           startIcon={busy === 'create' || busy === 'adopt' ? <CircularProgress size={16} color="inherit" /> : <BadgeOutlinedIcon />}
           sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
         >
-          {busy === 'create' ? 'Creating, about 20 seconds' : busy === 'adopt' ? 'Setting up' : confirm === 'adopt' ? 'Use this account' : 'Create login and email it'}
+          {busy === 'create'
+            ? 'Creating, about 20 seconds'
+            : busy === 'adopt'
+              ? 'Setting up'
+              : confirm === 'adopt'
+                ? 'Use this account'
+                : 'Create login and email it'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -315,9 +401,11 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
           )}
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          {first} already has a class account (made in Nexus or by hand), so there is nothing to create. Use it here to check the licence,
-          classroom, Team and group chat. No email is sent.
+          {signedIn
+            ? `Made by hand before class accounts were automatic, and ${first} already uses it. Nothing to do here.`
+            : `Made by hand before class accounts were automatic. ${first} has not signed in yet.`}
         </Typography>
+        {teamsProfile}
         {error && (
           <Alert severity="error" role="alert" sx={{ mt: 1.5 }}>
             {error}
@@ -328,17 +416,17 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
             {notice}
           </Alert>
         )}
-        <Box sx={{ mt: 2 }}>
+        {/* Someone already using the account is in their classroom and Team: no check to offer. */}
+        {!signedIn && (
           <Button
-            variant="outlined"
+            size="small"
             onClick={() => setConfirm('adopt')}
             disabled={busy !== null}
-            startIcon={<BadgeOutlinedIcon />}
-            sx={{ minHeight: 44, fontWeight: 700, textTransform: 'none' }}
+            sx={{ mt: 1, minHeight: 36, textTransform: 'none', px: 0 }}
           >
-            Use the existing account
+            Check the licence, classroom and Team
           </Button>
-        </Box>
+        )}
         {confirmDialog}
       </Paper>
     );
@@ -352,7 +440,8 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
         {header}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           The Microsoft login {first} uses for Teams and Nexus. Setting it up adds {first} to the year classroom and its Team, and emails the setup
-          guide{view.student.personalEmail ? ` to ${view.student.personalEmail}` : ''}.
+          guide
+          {view.student.personalEmail ? ` to ${view.student.personalEmail}` : ''}.
         </Typography>
         <TextField
           label="Login ID"
@@ -437,28 +526,14 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
       <Typography variant="body2" color="text.secondary">
         {ownPassword
           ? `${first} has chosen their own password.`
-          : setup!.passwordMode === 'start' && view.suggestion.startPassword
-            ? `Start password ${view.suggestion.startPassword} still works until ${first} signs in and changes it.`
-            : `${first} has not signed in yet.`}
+          : signedIn
+            ? `${first} already uses this account.`
+            : // A start password is only known for an account made or reset here, never one staff made by hand.
+              setup!.passwordMode === 'start' && view.suggestion.startPassword && (view.origin === 'made' || setup!.passwordResetAt)
+              ? `Start password ${view.suggestion.startPassword} still works until ${first} signs in and changes it.`
+              : `${first} has not signed in yet.`}
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
-        <Typography variant="body2" color="text.secondary">
-          Name in Teams: <strong>{view.teamsName.displayName}</strong>
-          {!view.teamsName.surname && ' (no surname on file)'}
-        </Typography>
-        <Button
-          size="small"
-          onClick={async () => {
-            const ok = await post(`/api/students/${userId}/class-account`, { syncName: true }, 'name');
-            if (ok) setNotice(`Teams now shows ${ok.name || view.teamsName.displayName}. It can take a few minutes to appear.`);
-          }}
-          disabled={busy !== null}
-          startIcon={busy === 'name' ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ minHeight: 36, textTransform: 'none' }}
-        >
-          Update name in Teams
-        </Button>
-      </Box>
+      {teamsProfile}
 
       {onceShown && (
         <Alert severity="warning" sx={{ mt: 1.5 }} onClose={() => setOnceShown(null)}>
@@ -478,13 +553,10 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
           aria-expanded={showSteps}
           sx={{ mt: 1, minHeight: 36, textTransform: 'none', px: 0 }}
         >
-          {showSteps ? 'Hide setup steps' : failed.length ? `Show setup steps (${failed.length} to retry)` : 'Show setup steps'}
+          {showSteps ? 'Hide setup steps' : failed.length ? `Show setup steps (${failed.length} not finished)` : 'Show setup steps'}
         </Button>
       )}
-      <Box
-        component="ul"
-        sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, display: view.signedInAt && !showSteps ? 'none' : 'grid', gap: 0.75 }}
-      >
+      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, display: view.signedInAt && !showSteps ? 'none' : 'grid', gap: 0.75 }}>
         {STEP_ORDER.map((key) => {
           const step = setup!.steps[key];
           return (
@@ -501,6 +573,16 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
                 {step.message && step.status !== 'done' && (
                   <Typography variant="caption" color={step.status === 'failed' ? 'error' : 'text.secondary'} sx={{ display: 'block' }}>
                     {step.message}
+                  </Typography>
+                )}
+                {key === 'teams' && step.status === 'failed' && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {teamsRetryNote({
+                      autoAt,
+                      exhausted: autoTries >= TEAMS_AUTO_RETRY_DELAYS_MIN.length,
+                      signedIn: !!view.signedInAt,
+                      firstName: first,
+                    })}
                   </Typography>
                 )}
               </Box>
@@ -521,18 +603,20 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
       )}
 
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
-        {failed.length > 0 && (
+        {/* For a student already signed in, a retry lives with the folded steps, not up front. */}
+        {failed.length > 0 && (!signedIn || showSteps) && (
           <Button
-            variant="contained"
+            variant={signedIn ? 'outlined' : 'contained'}
             onClick={() => post(`/api/students/${userId}/class-account`, {}, 'create')}
             disabled={busy !== null}
             startIcon={busy === 'create' ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
             sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
           >
-            {busy === 'create' ? 'Retrying' : `Retry ${STEP_LABELS[failed[0]].toLowerCase()}`}
+            {busy === 'create' ? 'Retrying' : autoAt && failed[0] === 'teams' ? 'Retry now' : `Retry ${STEP_LABELS[failed[0]].toLowerCase()}`}
           </Button>
         )}
-        {view.whatsapp && (
+        {/* Handing over the login is for before the first sign-in. */}
+        {view.whatsapp && !signedIn && (
           <>
             <Button
               variant="outlined"
@@ -556,22 +640,29 @@ export default function ClassAccountCard({ userId, adminId }: { userId: string; 
             </Button>
           </>
         )}
-        <Tooltip title={view.student.personalEmail ? '' : 'No personal email on file'}>
-          <span>
-            <Button
-              onClick={async () => {
-                const ok = await post(`/api/students/${userId}/class-account`, { resendWelcome: true }, 'resend');
-                if (ok) setNotice(`Welcome email sent to ${view.student.personalEmail}.`);
-              }}
-              disabled={busy !== null || !view.student.personalEmail}
-              startIcon={busy === 'resend' ? <CircularProgress size={16} color="inherit" /> : <MailOutlineIcon />}
-              sx={{ minHeight: 44, textTransform: 'none' }}
-            >
-              Resend email
-            </Button>
-          </span>
-        </Tooltip>
-        <Button onClick={() => setResetOpen(true)} disabled={busy !== null} startIcon={<LockResetIcon />} sx={{ minHeight: 44, textTransform: 'none' }}>
+        {!signedIn && (
+          <Tooltip title={view.student.personalEmail ? '' : 'No personal email on file'}>
+            <span>
+              <Button
+                onClick={async () => {
+                  const ok = await post(`/api/students/${userId}/class-account`, { resendWelcome: true }, 'resend');
+                  if (ok) setNotice(`Welcome email sent to ${view.student.personalEmail}.`);
+                }}
+                disabled={busy !== null || !view.student.personalEmail}
+                startIcon={busy === 'resend' ? <CircularProgress size={16} color="inherit" /> : <MailOutlineIcon />}
+                sx={{ minHeight: 44, textTransform: 'none' }}
+              >
+                Resend email
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+        <Button
+          onClick={() => setResetOpen(true)}
+          disabled={busy !== null}
+          startIcon={<LockResetIcon />}
+          sx={{ minHeight: 44, textTransform: 'none' }}
+        >
           Reset password
         </Button>
         {view.groupChatUrl && (

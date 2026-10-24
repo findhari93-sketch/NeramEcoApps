@@ -31,6 +31,13 @@ export const CLASS_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+/** Tense follows the demo: once it has happened, the parent joined (or was meant to). */
+export function parentJoiningLabel(status: DemoRequest['status']): string {
+  if (status === 'attended') return 'A parent joined the demo';
+  if (status === 'no_show') return 'A parent was going to join the demo';
+  return 'A parent is joining the demo';
+}
+
 export function classLabel(v: string | null): string | null {
   return v ? CLASS_LABELS[v] || v : null;
 }

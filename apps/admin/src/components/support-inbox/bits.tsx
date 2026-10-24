@@ -11,12 +11,6 @@ export const CHIP_SX = { height: 36, fontWeight: 500, position: 'relative', over
 /** Amber with readable text: dark on light amber, amber border. */
 export const WARNING_CHIP_SX = { bgcolor: 'warning.light', color: 'text.primary', border: 1, borderColor: 'warning.main' } as const;
 
-export function initialsOf(name: string | null | undefined): string {
-  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-}
-
 const SEGMENT: Record<SupportTicketRequesterSegment, { label: string; color: 'success' | 'info' | 'default' | 'secondary' }> = {
   enrolled: { label: 'Enrolled', color: 'success' },
   lead: { label: 'Lead', color: 'info' },

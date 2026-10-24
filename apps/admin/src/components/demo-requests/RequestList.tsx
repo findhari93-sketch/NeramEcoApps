@@ -32,8 +32,38 @@ import { hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-eviden
 import { NO_SHOW_AFTER_END_MIN } from '@/lib/demo/demo-verdict';
 import type { DemoScheduleSettings, DemoHost } from './types';
 import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage, type ProfileFee } from './journey';
-import { ago, classLabel, isCallbackDue, isOverdueNew, telHref, waHref, whenLabel } from './format';
+import { ago, classLabel, isCallbackDue, isOverdueNew, parentJoiningLabel, telHref, waHref, whenLabel } from './format';
 import { formatLaterDate } from '@/lib/demo/try-later';
+import DemoPersonAvatar from './DemoPersonAvatar';
+
+/**
+ * Below sm the four columns do not fit, so each row stacks like a card: the
+ * student with Call and WhatsApp beside them, then when, then where they stand.
+ * No sideways scroll on a phone.
+ */
+const PHONE_ROWS = {
+  '@media (max-width: 599.95px)': {
+    '& thead': { display: 'none' },
+    '& tbody tr': {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gridTemplateAreas: '"who contact" "when when" "state state"',
+      columnGap: 1,
+      rowGap: 0.75,
+      px: 2,
+      py: 1.5,
+      borderBottom: 1,
+      borderColor: 'divider',
+    },
+    '& tbody tr:last-of-type': { borderBottom: 0 },
+    '& tbody td': { display: 'block', minWidth: 0, p: 0, border: 0 },
+    '& tbody td:empty': { display: 'none' },
+    '& tbody td:nth-of-type(1)': { gridArea: 'who' },
+    '& tbody td:nth-of-type(2)': { gridArea: 'when', pl: '46px' },
+    '& tbody td:nth-of-type(3)': { gridArea: 'state', pl: '46px', whiteSpace: 'normal' },
+    '& tbody td:nth-of-type(4)': { gridArea: 'contact', alignSelf: 'start' },
+  },
+} as const;
 
 const HEAD: Record<DeskStage, [string, string]> = {
   to_call: ['Asked for', 'Call back'],
@@ -108,7 +138,7 @@ export default function RequestList({
   const nameOf = (upn: string | null) => (upn ? hosts.find((h) => h.upn.toLowerCase() === upn.toLowerCase())?.name || upn.split('@')[0] : null);
   return (
     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-      <Table size="small" aria-label="Demo students">
+      <Table size="small" aria-label="Demo students" sx={PHONE_ROWS}>
         <TableHead>
           <TableRow>
             <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
@@ -144,46 +174,51 @@ export default function RequestList({
                 sx={{ cursor: 'pointer', ...FOCUS_RING, '& td': { py: 1.25 } }}
               >
                 <TableCell sx={{ minWidth: 180 }}>
-                  <Typography variant="body2" fontWeight={700}>
-                    {r.name}
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', color: 'text.secondary' }}>
-                    <Typography variant="caption">{r.ref_code}</Typography>
-                    {classLabel(r.current_class) && <Typography variant="caption">{classLabel(r.current_class)}</Typography>}
-                    {p.history.length > 0 && (
-                      <Typography variant="caption">
-                        +{p.history.length} earlier request{p.history.length === 1 ? '' : 's'}
+                  <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+                    <DemoPersonAvatar request={r} enrolment={e} size={36} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={700}>
+                        {r.name}
                       </Typography>
-                    )}
-                    {e?.kind === 'student_before' && (
-                      <Tooltip title="Had a student profile before this demo: a current student or a test account">
-                        <Chip size="small" variant="outlined" color="info" label={`Student since ${formatIstDate(e.since)}`} sx={{ height: 20, fontSize: 11 }} />
-                      </Tooltip>
-                    )}
-                    {(r as DemoWithTeams).attendance_source === 'teams' && (r.status === 'attended' || r.status === 'no_show') && (
-                      <Tooltip title={(r as DemoWithTeams).teams_verdict?.reason ?? 'Marked from Teams attendance'}>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          icon={<AutoModeIcon />}
-                          label={r.status === 'attended' ? 'Attended, by Teams' : 'No-show, by Teams'}
-                          sx={{ height: 20, fontSize: 11, '& .MuiChip-icon': { fontSize: 14 } }}
-                        />
-                      </Tooltip>
-                    )}
-                    {r.account_holder === 'parent' && (
-                      <Chip size="small" variant="outlined" label="Parent's account" sx={{ height: 20, fontSize: 11 }} />
-                    )}
-                    {r.parent_joining && (
-                      <Tooltip title="Parent joining">
-                        <FamilyRestroomIcon aria-label="Parent joining" sx={{ fontSize: 16 }} />
-                      </Tooltip>
-                    )}
-                    {r.drawing_received_at && (
-                      <Tooltip title={r.drawing_feedback_at ? 'Drawing received, feedback sent' : 'Drawing received'}>
-                        <BrushIcon aria-label="Drawing received" sx={{ fontSize: 16, color: r.drawing_feedback_at ? 'success.main' : 'warning.main' }} />
-                      </Tooltip>
-                    )}
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', color: 'text.secondary' }}>
+                        <Typography variant="caption">{r.ref_code}</Typography>
+                        {classLabel(r.current_class) && <Typography variant="caption">{classLabel(r.current_class)}</Typography>}
+                        {p.history.length > 0 && (
+                          <Typography variant="caption">
+                            +{p.history.length} earlier request{p.history.length === 1 ? '' : 's'}
+                          </Typography>
+                        )}
+                        {e?.kind === 'student_before' && (
+                          <Tooltip title="Had a student profile before this demo: a current student or a test account">
+                            <Chip size="small" variant="outlined" color="info" label={`Student since ${formatIstDate(e.since)}`} sx={{ height: 20, fontSize: 11 }} />
+                          </Tooltip>
+                        )}
+                        {(r as DemoWithTeams).attendance_source === 'teams' && (r.status === 'attended' || r.status === 'no_show') && (
+                          <Tooltip title={(r as DemoWithTeams).teams_verdict?.reason ?? 'Marked from Teams attendance'}>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              icon={<AutoModeIcon />}
+                              label={r.status === 'attended' ? 'Attended, by Teams' : 'No-show, by Teams'}
+                              sx={{ height: 20, fontSize: 11, '& .MuiChip-icon': { fontSize: 14 } }}
+                            />
+                          </Tooltip>
+                        )}
+                        {r.account_holder === 'parent' && (
+                          <Chip size="small" variant="outlined" label="Parent's account" sx={{ height: 20, fontSize: 11 }} />
+                        )}
+                        {r.parent_joining && (
+                          <Tooltip title={parentJoiningLabel(r.status)}>
+                            <FamilyRestroomIcon aria-label={parentJoiningLabel(r.status)} sx={{ fontSize: 16 }} />
+                          </Tooltip>
+                        )}
+                        {r.drawing_received_at && (
+                          <Tooltip title={r.drawing_feedback_at ? 'Drawing received, feedback sent' : 'Drawing received'}>
+                            <BrushIcon aria-label="Drawing received" sx={{ fontSize: 16, color: r.drawing_feedback_at ? 'success.main' : 'warning.main' }} />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </Box>
                   </Box>
                 </TableCell>
 

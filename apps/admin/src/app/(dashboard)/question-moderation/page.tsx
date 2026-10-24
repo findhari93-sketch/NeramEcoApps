@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Button, Chip, Stack, Paper, UserAvatar,
+  Box, Typography, Button, Chip, Stack, Paper,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Tabs, Tab, ToggleButton, ToggleButtonGroup,
   IconButton, EditIcon,
@@ -13,6 +13,7 @@ import type {
   QuestionChangeRequestDisplay,
 } from '@neram/database';
 import AdminEditQuestionDialog from '@/components/question-bank/AdminEditQuestionDialog';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -375,7 +376,7 @@ export default function QuestionModerationPage() {
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                      <UserAvatar src={item.author?.avatar_url} name={item.author?.name} size={24} />
+                      <PersonAvatar userId={item.author?.id} src={item.author?.avatar_url} name={item.author?.name} size={18} tapToView />
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                         {item.author?.name || 'Anonymous'}
                       </Typography>
@@ -517,7 +518,7 @@ export default function QuestionModerationPage() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     {/* Author + metadata row */}
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }} flexWrap="wrap" useFlexGap>
-                      <UserAvatar src={cr.author?.avatar_url} name={cr.author?.name} size={24} />
+                      <PersonAvatar userId={cr.author?.id} src={cr.author?.avatar_url} name={cr.author?.name} size={18} tapToView />
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                         {cr.author?.name || 'Anonymous'}
                       </Typography>
@@ -711,7 +712,7 @@ export default function QuestionModerationPage() {
             </DialogTitle>
             <DialogContent dividers>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <UserAvatar src={viewQuestion.author?.avatar_url} name={viewQuestion.author?.name} size={28} />
+                <PersonAvatar userId={viewQuestion.author?.id} src={viewQuestion.author?.avatar_url} name={viewQuestion.author?.name} size={28} tapToView />
                 <Typography variant="body2">{viewQuestion.author?.name || 'Anonymous'}</Typography>
                 <Typography variant="body2" color="text.disabled">{timeAgo(viewQuestion.created_at)}</Typography>
               </Stack>

@@ -486,6 +486,18 @@ export type { UserAvatarProps } from './UserAvatar';
 export { ImageViewerDialog } from './ImageViewerDialog';
 export type { ImageViewerDialogProps } from './ImageViewerDialog';
 
+// The who-is-this ring around an avatar (student / paused / alumni / lead / staff / other)
+export {
+  AvatarRing,
+  AVATAR_RING_EXTRA,
+  GOLD_RING_GRADIENT,
+  SILVER_RING_GRADIENT,
+  PAUSED_RING_COLOR,
+  NEUTRAL_RING_COLOR,
+  STAFF_RING_COLOR,
+} from './AvatarRing';
+export type { AvatarRingProps, AvatarRingVariant } from './AvatarRing';
+
 /**
  * Status badge component
  */

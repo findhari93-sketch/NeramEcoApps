@@ -19,7 +19,7 @@ import {
   Skeleton,
   Pagination,
 } from '@mui/material';
-import { UserAvatar } from '@neram/ui';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import SearchIcon from '@mui/icons-material/Search';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
@@ -180,11 +180,11 @@ export function StudentDeviceTable({ onViewStudent, isMobile, batch }: StudentDe
                     gap: 1,
                   }}
                 >
-                  <UserAvatar
+                  <PersonAvatar
+                    userId={student.user_id}
                     src={student.user_avatar}
                     name={student.user_name}
                     size={28}
-                    tapToView={false}
                     sx={{ mt: 0.25, flexShrink: 0 }}
                   />
 
@@ -364,7 +364,7 @@ export function StudentDeviceTable({ onViewStudent, isMobile, batch }: StudentDe
                 <TableRow key={student.user_id} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <UserAvatar src={student.user_avatar} name={student.user_name} size={32} />
+                      <PersonAvatar userId={student.user_id} src={student.user_avatar} name={student.user_name} size={32} tapToView />
                       <Box>
                         <Typography variant="body2" fontWeight={600}>
                           {student.user_name}

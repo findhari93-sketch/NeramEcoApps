@@ -332,8 +332,8 @@ export default function ClassifyDrawer({
             <Divider sx={{ mt: 1 }} />
 
             <Box ref={languageRef} sx={{ display: 'flex', flexDirection: 'column', gap: 1, scrollMarginTop: 16 }}>
-              {/* A select rather than tiles: five languages plus "leave
-                  unchanged" is six options, and the exam-year field directly
+              {/* A select rather than tiles: six languages plus "leave
+                  unchanged" is seven options, and the exam-year field directly
                   above already solves that shape on a 375px sheet. Its own label
                   heads the section, exactly as the exam year's does. */}
               <TextField

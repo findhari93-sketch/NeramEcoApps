@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Box, Button, Collapse, Paper, Rating, Typography, UserAvatar } from '@neram/ui';
+import { Box, Button, Collapse, Paper, Rating, Typography } from '@neram/ui';
 import CheckIcon from '@mui/icons-material/Check';
 import PublicIcon from '@mui/icons-material/Public';
 import BlockIcon from '@mui/icons-material/Block';
@@ -20,6 +20,7 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { LOW_RATING_THRESHOLD, PUBLICATION_STATUS_LABELS } from '@neram/database';
 import type { PublicationStatus } from '@neram/database';
 import { StatusChip } from '@/components/user360/shared';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import {
   ACTION_LABELS,
   EXAM_LABELS,
@@ -140,7 +141,7 @@ export default function ModerationCard({
       sx={{ border: '1px solid', borderColor: status === 'pending_moderation' || unconfirmed ? 'rgba(237,108,2,0.45)' : 'grey.200', borderRadius: 1, p: 2, minWidth: 0 }}
     >
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <UserAvatar name={t.student_name} src={t.student_photo} size={40} clickable={false} />
+        <PersonAvatar userId={t.user_id} name={t.student_name} src={t.student_photo} size={40} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>
             {t.student_name || 'Learner'}

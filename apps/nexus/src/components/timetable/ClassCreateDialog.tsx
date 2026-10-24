@@ -48,6 +48,7 @@ import PrewatchField from './prewatch/PrewatchField';
 import { candidateOfItem, picksOf, samePicks } from './prewatch/prewatch-client';
 import type { PrewatchCandidate } from '@/lib/prewatch-suggest';
 import { PREWATCH_FEATURE } from '@/lib/feature-flags';
+import { STANDARD_CLASS, newClassTimes } from './new-class-defaults';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface TopicOption {
@@ -150,15 +151,16 @@ function generateTimeOptions(): { value: string; label: string }[] {
 
 const TIME_OPTIONS = generateTimeOptions();
 
+// A new class opens as the standard evening session; every field stays editable.
 const emptyForm: ClassFormData = {
-  title: '',
+  title: STANDARD_CLASS.title,
   scheduled_date: todayStr(),
-  start_time: '',
-  end_time: '',
+  start_time: STANDARD_CLASS.start_time,
+  end_time: STANDARD_CLASS.end_time,
   topic_id: '',
   teacher_id: '',
   classroom_ids: [],
-  create_meeting: false,
+  create_meeting: STANDARD_CLASS.create_meeting,
   description: '',
   meeting_scope: 'auto',
   lobby_bypass: 'organization',
@@ -350,11 +352,7 @@ export default function ClassCreateDialog({
         ...emptyForm,
         classroom_ids: fallbackIds,
         scheduled_date: prefillDate || '',
-        start_time: prefillTime || '',
-        end_time: prefillTime ? (() => {
-          const [h] = prefillTime.split(':').map(Number);
-          return `${(h + 1).toString().padStart(2, '0')}:00`;
-        })() : '',
+        ...newClassTimes(prefillTime),
       });
     } else {
       setFormData({ ...emptyForm, classroom_ids: fallbackIds });
@@ -758,6 +756,9 @@ export default function ClassCreateDialog({
             fullWidth
             value={formData.title}
             onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+            // Select the whole title on focus so typing a custom one replaces the standard title.
+            onFocus={(e) => e.target.select()}
+            helperText={!editingClass && formData.title === STANDARD_CLASS.title ? 'Standard title, type to change' : undefined}
             inputProps={{ style: { minHeight: 24 } }}
           />
 

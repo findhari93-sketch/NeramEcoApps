@@ -7,6 +7,7 @@ import { generateTempPassword, resetEntraPassword, startPassword } from '@neram/
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
 import { readClassAccountSetup, readClassAccountStudent } from '@/lib/class-account-store';
 import { buildClassAccountView } from '@/lib/class-account-view';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * POST: back to the start password (Radhika@123) with a forced change at the
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       reset = await resetEntraPassword(msOid, password);
     }
     if (!reset.ok) {
-      return NextResponse.json({ error: reset.error.fix ? `${reset.error.message} ${reset.error.fix}` : reset.error.message }, { status: 502 });
+      return NextResponse.json({ error: reset.error.fix ? `${reset.error.message} ${reset.error.fix}` : reset.error.message }, { status: UPSTREAM_FAILED });
     }
 
     if (setup) {

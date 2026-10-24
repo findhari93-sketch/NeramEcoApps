@@ -97,6 +97,24 @@ export function collectionsBadgeCount(
   }, 0);
 }
 
+/** The demo desk only lists requests from the last 120 days (GET /api/demo-requests). */
+export const DEMO_DESK_DAYS = 120;
+
+/**
+ * The Demo Classes badge: the calls the desk is waiting on. Desk (v2) requests
+ * only, the ones with a ref_code, from the desk's 120-day window, that are new
+ * (pending) or were parked with Try later and are due again. Old v1
+ * registrations without a ref_code never show on the desk, so they never count.
+ * Returns the created_at floor and the PostgREST or() filter for the status rule.
+ */
+export function demoBadgeQuery(now: Date = new Date()): { since: string; statusFilter: string } {
+  const nowIso = now.toISOString();
+  return {
+    since: new Date(now.getTime() - DEMO_DESK_DAYS * DAY_MS).toISOString(),
+    statusFilter: `status.eq.pending,and(status.eq.contacted,last_call_outcome.eq.later,next_contact_at.lte.${nowIso})`,
+  };
+}
+
 /** Whether a focus / navigation trigger should fetch, given when the last fetch ran. */
 export function shouldRefreshBadges(lastFetchedAt: number | null, now: number = Date.now()): boolean {
   if (lastFetchedAt === null) return true;

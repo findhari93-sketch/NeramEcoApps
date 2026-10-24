@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getWhatsAppHealth, getWhatsAppSendBlock, DEMO_WA_TEMPLATES } from '@neram/database';
 import { blockReasons } from '@/lib/whatsapp-block';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * GET /api/whatsapp/health
@@ -23,6 +24,6 @@ export async function GET() {
     return NextResponse.json({ health, templates: DEMO_WA_TEMPLATES });
   } catch (error) {
     console.error('whatsapp health failed:', error);
-    return NextResponse.json({ error: 'Could not reach Meta' }, { status: 502 });
+    return NextResponse.json({ error: 'Could not reach Meta' }, { status: UPSTREAM_FAILED });
   }
 }

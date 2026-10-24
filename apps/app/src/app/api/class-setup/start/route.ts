@@ -22,10 +22,18 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(55_000),
     });
     const json = await res.json().catch(() => null);
-    if (!res.ok) return NextResponse.json({ error: json?.error || 'Could not start your class account.' }, { status: res.status });
+    if (!res.ok) return NextResponse.json({ error: json?.error || 'Could not start your class account.' }, { status: clientStatus(res.status) });
     return NextResponse.json({ success: true, data: json?.data ?? null }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error: any) {
     console.error('[class-setup/start] failed:', error?.message);
-    return NextResponse.json({ error: 'Could not start your class account.' }, { status: 502 });
+    return NextResponse.json({ error: 'Could not start your class account.' }, { status: 424 });
   }
+}
+
+/**
+ * Never answer 502 or 504: Cloudflare in front of app.neramclasses.com swaps
+ * those for its own HTML page and the student never sees the message.
+ */
+function clientStatus(status: number): number {
+  return status === 502 || status === 504 ? 424 : status;
 }

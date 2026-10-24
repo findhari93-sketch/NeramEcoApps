@@ -13,7 +13,6 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  UserAvatar,
   Breadcrumbs,
   Link as MuiLink,
   Tooltip,
@@ -34,6 +33,7 @@ import PendingIcon from '@mui/icons-material/Pending';
 import ReplayIcon from '@mui/icons-material/Replay';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import ProofLink from '@/components/payments/ProofLink';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface PaymentDetail {
   id: string;
@@ -832,7 +832,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
               }
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                <UserAvatar src={payment.student_avatar} name={payment.student_name} size={48} />
+                <PersonAvatar userId={payment.user_id} src={payment.student_avatar} name={payment.student_name} size={48} tapToView />
                 <Box>
                   <Typography variant="body1" fontWeight={600}>
                     {payment.student_name}

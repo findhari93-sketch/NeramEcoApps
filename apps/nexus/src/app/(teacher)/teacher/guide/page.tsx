@@ -181,7 +181,7 @@ export default function GuidePage() {
         'In the Overview tab, find the "Microsoft Teams" section.',
         'Click "Link Existing Team" to connect your Teams team, or "Create New Team" to create a fresh one.',
         'Turn on "Auto-sync" so students are automatically added to Teams when enrolled in Nexus.',
-        'When scheduling a class, toggle "Create Teams Meeting" ON — this posts to the channel and sends calendar invites.',
+        '"Create Teams Meeting" is ON for every new class. It posts to the channel and sends calendar invites. Turn it off only for a class that needs no meeting.',
         'Use "Sync Now" to reconcile existing members at any time.',
       ],
       tips: [

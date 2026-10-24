@@ -26,7 +26,6 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { UserAvatar } from '@neram/ui';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
@@ -42,6 +41,7 @@ import type { DeviceDistributionStats, StudentDeviceSummary, DeviceSwapRequestWi
 import { DeviceDistributionChart } from '@/components/devices/DeviceDistributionChart';
 import { StudentDeviceTable } from '@/components/devices/StudentDeviceTable';
 import { useBatches } from '@/contexts/BatchContext';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 function StatCard({
   label,
@@ -184,7 +184,7 @@ function StudentDetailDialog({
           <Box>
             {/* Student info */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <UserAvatar src={detail.user_avatar} name={detail.user_name} size={48} />
+              <PersonAvatar userId={detail.user_id} src={detail.user_avatar} name={detail.user_name} size={48} tapToView />
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>
                   {detail.user_name}
@@ -337,7 +337,7 @@ function SwapRequestsSection({ isMobile }: { isMobile?: boolean }) {
             {requests.map((req) => (
               <Paper key={req.id} variant="outlined" sx={{ p: 1.25, borderRadius: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                  <UserAvatar src={req.user_avatar} name={req.user_name} size={24} />
+                  <PersonAvatar userId={req.user_id} src={req.user_avatar} name={req.user_name} size={18} tapToView />
                   <Typography sx={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {req.user_name}
                   </Typography>
@@ -403,7 +403,7 @@ function SwapRequestsSection({ isMobile }: { isMobile?: boolean }) {
                   <TableRow key={req.id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <UserAvatar src={req.user_avatar} name={req.user_name} size={32} />
+                        <PersonAvatar userId={req.user_id} src={req.user_avatar} name={req.user_name} size={32} tapToView />
                         <Box>
                           <Typography variant="body2" fontWeight={600}>
                             {req.user_name}

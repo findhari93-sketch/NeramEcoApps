@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Autocomplete,
-  Avatar,
   Box,
   Button,
   Checkbox,
@@ -24,6 +23,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
 import { resolveDemoSettings, type DemoHost, type DemoWindowDef } from '@neram/database/demo-schedule';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface StaffOption {
   name: string;
@@ -183,9 +183,7 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
                     }}
                     renderOption={(props, o) => (
                       <Box component="li" {...props} key={o.email} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minHeight: 48 }}>
-                        <Avatar src={o.avatar_url ?? undefined} alt="" sx={{ width: 32, height: 32 }}>
-                          {o.name.charAt(0)}
-                        </Avatar>
+                        <PersonAvatar src={o.avatar_url ?? null} name={o.name} size={28} ring="staff" hideLanguage tooltip={false} />
                         <Box sx={{ minWidth: 0 }}>
                           <Typography variant="body2" fontWeight={600} noWrap>
                             {o.name}

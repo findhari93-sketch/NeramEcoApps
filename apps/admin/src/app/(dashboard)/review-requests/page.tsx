@@ -44,7 +44,6 @@ import {
   TextField,
   Tooltip,
   Typography,
-  UserAvatar,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
@@ -68,6 +67,7 @@ import { formatDate } from '@/lib/user360-view';
 import { PROGRESS_ORDER, googleLinkWarning, resultLine } from '@/lib/review-requests-view';
 import type { ReviewPersonCandidate } from '@/app/api/review-requests/people/route';
 import BatchLinksDialog from '@/components/review-requests/BatchLinksDialog';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 type Row = ReviewRequestListRow & {
   url: string;
@@ -386,7 +386,7 @@ export default function ReviewRequestsPage() {
                   <TableRow key={r.id} hover>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 200 }}>
-                        <UserAvatar name={r.student_name} src={r.photo_url} size={36} clickable={false} />
+                        <PersonAvatar userId={r.user_id} name={r.student_name} src={r.photo_url} size={36} />
                         <Box sx={{ minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 600 }}>{r.student_name}</Typography>
                           <Typography variant="body2" color="text.secondary">
@@ -710,7 +710,13 @@ function NewRequestDrawer({
           noOptionsText={query.trim().length < 2 ? 'Type at least two letters' : 'No one found. Fill the details below by hand.'}
           renderOption={(props, o) => (
             <Box component="li" {...props} key={o.key} sx={{ display: 'flex', gap: 1.25, alignItems: 'center' }}>
-              <UserAvatar name={o.name} src={o.photoUrl} size={32} clickable={false} />
+              <PersonAvatar
+                userId={o.userId}
+                name={o.name}
+                src={o.photoUrl}
+                size={32}
+                ring={!o.userId && o.source === 'result' ? 'alumni' : undefined}
+              />
               <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontWeight: 600 }}>{o.name}</Typography>
                 <Typography variant="body2" color="text.secondary">

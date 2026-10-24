@@ -2,6 +2,8 @@
  * Who the class-account job looks at: students who enrolled in the last 30
  * days with no Microsoft account and no setup, and setups whose account step
  * stopped. Enrolments younger than 3 minutes are left to the student's page.
+ * Also made accounts with a failed later step (finishDue), tried again with a
+ * doubling wait so a step that keeps failing is not hammered.
  */
 
 const DAY = 24 * 60 * 60_000;
@@ -9,9 +11,33 @@ export const ENROLLED_WINDOW_MS = 30 * DAY;
 export const PAGE_GRACE_MS = 3 * 60_000;
 export const RETRY_AFTER_MS = 5 * 60_000;
 export const RETRY_WINDOW_MS = 7 * DAY;
+export const FINISH_MIN_GAP_MS = 10 * 60_000;
+export const FINISH_MAX_GAP_MS = 6 * 60 * 60_000;
 
 interface LinkRow { used_by: string | null; submitted_user_id: string | null; user_id: string | null }
-interface SetupRow { user_id: string; steps: { account?: { status?: string } } | null }
+interface SetupRow {
+  user_id: string;
+  created_at?: string | null;
+  steps: Record<string, { status?: string; at?: string } | undefined> | null;
+}
+
+/**
+ * An account that exists with a failed later step, due another try: the wait
+ * since the last try is at least as long as the setup had lived by then
+ * (10 minutes, 20, 40 ... at most 6 hours).
+ */
+export function finishDue(s: SetupRow, now: number): boolean {
+  const steps = s.steps || {};
+  if (steps.account?.status !== 'done') return false;
+  const tries = Object.values(steps)
+    .filter((step) => step?.status === 'failed')
+    .map((step) => Date.parse(step?.at || ''));
+  if (!tries.length) return false;
+  const last = Math.max(...tries.map((t) => (Number.isFinite(t) ? t : 0)));
+  const born = Date.parse(s.created_at || '');
+  const gap = Math.min(FINISH_MAX_GAP_MS, Math.max(FINISH_MIN_GAP_MS, Number.isFinite(born) ? last - born : 0));
+  return now - last >= gap;
+}
 
 /** The decision, without the database: new enrolments first, then stopped runs. */
 export function pickCandidates(input: {
@@ -38,7 +64,8 @@ export function pickCandidates(input: {
   return Array.from(new Set([...fresh, ...stopped]));
 }
 
-export async function classAccountCandidates(sb: any, now: number): Promise<string[]> {
+/** make: students to give an account; finish: made accounts with a failed step due again. */
+export async function classAccountCandidates(sb: any, now: number): Promise<{ make: string[]; finish: string[] }> {
   const iso = (ms: number) => new Date(ms).toISOString();
   const since = iso(now - ENROLLED_WINDOW_MS);
   const until = iso(now - PAGE_GRACE_MS);
@@ -47,7 +74,7 @@ export async function classAccountCandidates(sb: any, now: number): Promise<stri
     sb.from('student_profiles').select('user_id').gte('created_at', since).lte('created_at', until),
     sb
       .from('class_account_setups')
-      .select('user_id, steps')
+      .select('user_id, created_at, steps')
       .gte('created_at', iso(now - RETRY_WINDOW_MS))
       .lt('updated_at', iso(now - RETRY_AFTER_MS)),
   ]);
@@ -67,11 +94,13 @@ export async function classAccountCandidates(sb: any, now: number): Promise<stri
       ])
     : [{ data: [] }, { data: [] }];
 
-  return pickCandidates({
+  const make = pickCandidates({
     links: links.data ?? [],
     profiles: profiles.data ?? [],
     users: users.data ?? [],
     withSetup: (setups.data ?? []).map((s: any) => s.user_id),
     stale: stale.data ?? [],
   });
+  const finish = (stale.data ?? []).filter((s: SetupRow) => finishDue(s, now)).map((s: SetupRow) => s.user_id);
+  return { make, finish };
 }

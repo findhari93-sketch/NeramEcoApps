@@ -110,7 +110,7 @@ describe('Transcript: Mark resolved', () => {
       />
     );
     expect(screen.getByText('Enrolled student')).toBeTruthy();
-    expect(container.querySelector('[title="Enrolled student"]')).toBeTruthy();
+    expect(container.querySelector('[data-ring="student"]')).toBeTruthy();
   });
 });
 

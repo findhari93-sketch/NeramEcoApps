@@ -16,7 +16,8 @@ export async function makeSignInLink(db: any, email: string, name: string, origi
     type = 'magiclink';
   }
   if (res.error || !res.data?.properties?.hashed_token) {
-    throw new DashboardError(502, `Could not create the sign-in link: ${res.error?.message ?? 'no token'}`);
+    // 424, not 502: Cloudflare swaps an origin 502 for its own page.
+    throw new DashboardError(424, `Could not create the sign-in link: ${res.error?.message ?? 'no token'}`);
   }
   const token = encodeURIComponent(res.data.properties.hashed_token);
   return { link: `${origin}/college-dashboard/welcome?token_hash=${token}&type=${type}`, userId: res.data.user.id };

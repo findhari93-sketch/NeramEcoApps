@@ -11,6 +11,47 @@ export const STUDENT_ACCOUNT_DOMAIN = 'neramclasses.com';
 export const DEFAULT_USAGE_LOCATION = 'IN';
 export const NEXUS_SIGN_IN_URL = 'https://nexus.neramclasses.com';
 
+/** The job title staff have always put on a student's Microsoft account. */
+export const STUDENT_JOB_TITLE = 'Student';
+
+/**
+ * The department staff have always put on a student's account: NNE and the last
+ * two digits of the exam year (NNE28 sits the 2028 exam), so Teams shows the batch.
+ */
+export function studentDepartment(examYear: number | null | undefined): string | null {
+  if (!examYear || !Number.isInteger(examYear) || examYear < 2000 || examYear > 2099) return null;
+  return `NNE${String(examYear).slice(-2)}`;
+}
+
+/** What to change so Teams shows the student as staff would have set them up. Null when nothing. */
+export interface TeamsProfileFix {
+  name: string | null;
+  jobTitle: string | null;
+  department: string | null;
+}
+
+/**
+ * The name is only corrected on an account this system made: on a hand-made one,
+ * staff typed the name and it stays theirs. A job title staff chose is kept; a
+ * missing one becomes Student. The department follows the exam year on file.
+ */
+export function teamsProfileFix(input: {
+  current: { displayName: string; jobTitle: string | null; department: string | null };
+  expectedName: string;
+  nameIsOurs: boolean;
+  examYear: number | null | undefined;
+}): TeamsProfileFix | null {
+  const expectedName = input.expectedName.trim();
+  const name =
+    input.nameIsOurs && expectedName && input.current.displayName.trim().toLowerCase() !== expectedName.toLowerCase()
+      ? expectedName
+      : null;
+  const jobTitle = input.current.jobTitle?.trim() ? null : STUDENT_JOB_TITLE;
+  const wanted = studentDepartment(input.examYear);
+  const department = wanted && (input.current.department || '').trim().toUpperCase() !== wanted ? wanted : null;
+  return name || jobTitle || department ? { name, jobTitle, department } : null;
+}
+
 /** Entra caps the part before the @ at 64 characters. */
 const MAX_USERNAME = 64;
 

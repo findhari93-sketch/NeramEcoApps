@@ -21,6 +21,7 @@ export const maxDuration = 60;
  */
 import { NextResponse } from 'next/server';
 import { syncMsPhotosBulk } from '@/lib/ms-photo-sync';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
   try {
     const summary = await syncMsPhotosBulk();
     if (summary.configError) {
-      return NextResponse.json({ success: false, ...summary }, { status: 502 });
+      return NextResponse.json({ success: false, ...summary }, { status: UPSTREAM_FAILED });
     }
     return NextResponse.json({ success: true, ...summary });
   } catch (error: any) {

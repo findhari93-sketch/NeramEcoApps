@@ -22,6 +22,7 @@ import { listParentChildren, getChildClassrooms } from '@/lib/parent-auth';
 import { planEntry } from '@/lib/not-started';
 import { recordNexusEntry } from '@/lib/not-started-server';
 import { isValidTimeZone } from '@/lib/sketchbook-rhythm';
+import { hasPendingClassTeams, mayHavePendingClassTeams } from '@/lib/class-account-teams';
 import {
   TIMETABLE_WINDOW_KEY,
   parseWindow,
@@ -263,7 +264,7 @@ export async function GET(request: NextRequest) {
     // serverless instance may be frozen the moment the response is sent, which would
     // silently drop it. Awaiting it alongside the reads costs nothing, because it is
     // no longer in anyone's way.
-    const [, enrollmentsResult, currentBatchCode, settingsResults] = await Promise.all([
+    const [, enrollmentsResult, currentBatchCode, settingsResults, , classTeamsPending] = await Promise.all([
       Object.keys(updates).length > 0
         ? supabase.from('users').update(updates).eq('id', user.id)
         : Promise.resolve(null),
@@ -290,6 +291,13 @@ export async function GET(request: NextRequest) {
       ]),
 
       timeZoneWrite,
+
+      // A class account made in Admin whose class Team step has not taken yet
+      // (lib/class-account-teams.ts). Read only for a student linked in the last
+      // two weeks; everyone else costs nothing. Never fatal.
+      mayHavePendingClassTeams(user, { impersonating: !!msUser.impersonatorUserId, now: Date.now() })
+        ? hasPendingClassTeams(supabase, user.id).catch(() => false)
+        : Promise.resolve(false),
     ]);
 
     if (updates.name) user = { ...user, name: updates.name };
@@ -462,6 +470,8 @@ export async function GET(request: NextRequest) {
       featureFlags,
       timetableWindow,
       photoGate,
+      // True: the browser calls POST /api/student/class-teams once to finish it.
+      classTeamsPending,
     });
   } catch (err) {
     // 401 only for a real authentication failure. Everything else (a Graph

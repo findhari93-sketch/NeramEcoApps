@@ -19,6 +19,7 @@ import { exactIlikePattern } from '@/lib/admin-api-auth';
 import { isCollegeRole, removesLastOwner, validateInvite, type AccountLike, type CollegeRole } from '@/lib/college-accounts/invite';
 import { generateAccountLink, sendInviteEmail } from '@/lib/college-accounts/service';
 import { resolveStaff } from '@/lib/staff-actor';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const noStore = { 'Cache-Control': 'no-store' };
 
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
   try {
     link = await generateAccountLink(input.email, input.name, request.nextUrl.origin);
   } catch (err) {
-    return NextResponse.json({ error: `Could not create the invite link: ${(err as Error).message}` }, { status: 502 });
+    return NextResponse.json({ error: `Could not create the invite link: ${(err as Error).message}` }, { status: UPSTREAM_FAILED });
   }
 
   const now = new Date().toISOString();
@@ -168,7 +169,7 @@ export async function PATCH(request: NextRequest) {
     try {
       link = await generateAccountLink(account.email, account.name, request.nextUrl.origin);
     } catch (err) {
-      return NextResponse.json({ error: `Could not create the link: ${(err as Error).message}` }, { status: 502 });
+      return NextResponse.json({ error: `Could not create the link: ${(err as Error).message}` }, { status: UPSTREAM_FAILED });
     }
     const now = new Date().toISOString();
     await admins().update({ supabase_uid: link.userId, invited_at: now, invited_by: staff.name, updated_at: now }).eq('id', id);

@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
 import { AiBlockedError, generateGemini } from '@neram/ai';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const REVIEW_SYSTEM_PROMPT = `You are a meticulous quality reviewer for "Aintra", the AI assistant of Neram Classes, an architecture-entrance coaching institute in India (NATA and JEE Paper 2 / B.Arch admissions).
 
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             ? 'AI review is temporarily unavailable: every model is rate limited. Try again shortly.'
             : `AI review failed (${message}).`,
         },
-        { status: 502 }
+        { status: UPSTREAM_FAILED }
       );
     }
 
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (saveError) console.warn('[AintraReview] could not save the review:', saveError.message);
       return NextResponse.json(review);
     } catch {
-      return NextResponse.json({ error: 'AI review failed (BAD_JSON).' }, { status: 502 });
+      return NextResponse.json({ error: 'AI review failed (BAD_JSON).' }, { status: UPSTREAM_FAILED });
     }
   } catch (err) {
     console.error('[AintraReview] Error:', err);

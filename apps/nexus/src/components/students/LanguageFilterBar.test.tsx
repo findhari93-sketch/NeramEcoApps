@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import LanguageFilterBar from './LanguageFilterBar';
 import { INFO_RING_LABEL_RE } from '@/lib/student-info-ring';
 
-const counts = { tamil: 12, hindi: 1, kannada: 1, malayalam: 0, english: 23 };
+const counts = { tamil: 12, hindi: 1, kannada: 1, malayalam: 0, telugu: 0, english: 23 };
 
 /** A filter chip must never be mistaken for an info ring. */
 const RING = INFO_RING_LABEL_RE;
@@ -27,12 +27,13 @@ function setup(overrides: Partial<ComponentProps<typeof LanguageFilterBar>> = {}
 }
 
 describe('LanguageFilterBar', () => {
-  it('offers all five languages with their counts', () => {
+  it('offers all six languages with their counts', () => {
     setup();
     expect(screen.getByRole('button', { name: 'Tamil, 12 students' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Hindi, 1 students' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Kannada, 1 students' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Malayalam, 0 students' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Telugu, 0 students' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'English, 23 students' })).toBeTruthy();
   });
 

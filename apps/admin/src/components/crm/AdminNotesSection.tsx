@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { UserAvatar, Box, Button, Paper, TextField, Typography } from '@neram/ui';
+import { Box, Button, Paper, TextField, Typography } from '@neram/ui';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import SendIcon from '@mui/icons-material/Send';
 import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 import type { AdminUserNote } from '@neram/database';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface AdminNotesSectionProps {
   notes: AdminUserNote[];
@@ -99,7 +100,7 @@ export default function AdminNotesSection({ notes, userId, adminId, adminName, o
               transition: 'box-shadow 0.15s', '&:hover': { boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <UserAvatar name={note.admin_name || 'A'} size={24} />
+                <PersonAvatar name={note.admin_name || 'A'} size={20} ring="staff" hideLanguage />
                 <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 12 }}>{note.admin_name}</Typography>
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: 11 }}>{timeAgo(note.created_at)}</Typography>
               </Box>

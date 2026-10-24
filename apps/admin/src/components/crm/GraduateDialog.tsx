@@ -15,7 +15,6 @@ import {
   AlertTitle,
   CircularProgress,
   Chip,
-  UserAvatar,
   Divider,
   Checkbox,
   FormControlLabel,
@@ -23,6 +22,7 @@ import {
 import useMediaQuery from '@mui/material/useMediaQuery';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import { academicYearOptions, ACADEMIC_YEAR_REGEX } from './academic-years';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 export interface GraduateStudent {
   id: string;
@@ -303,7 +303,7 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
                     borderColor: 'grey.100',
                   }}
                 >
-                  <UserAvatar src={s.avatar_url} name={s.name} size={28} />
+                  <PersonAvatar userId={s.id} src={s.avatar_url} name={s.name} size={28} tapToView />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={500} noWrap>
                       {s.name}

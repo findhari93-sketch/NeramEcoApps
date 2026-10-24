@@ -381,6 +381,8 @@ export function useNexusAuth(): NexusAuthState {
    * Student started) cannot land last and put that identity back (PERF-0055).
    */
   const loadSeqRef = useRef(0);
+  /** POST /api/student/class-teams goes at most once per session. */
+  const classTeamsSentRef = useRef(false);
 
   /**
    * The Answer Pad's Teams pages (/pad/teams, /pad/stage) sign in with the Teams
@@ -776,6 +778,13 @@ export function useNexusAuth(): NexusAuthState {
         setActiveChildId(data.activeChildId ?? linkedChildren[0]?.id ?? null);
 
         setActiveClassroomState(pickActiveClassroom(data.classrooms || []));
+
+        // A new class account whose class Team step did not take in Admin: finish it
+        // now, once per session, in the background (lib/class-account-teams.ts).
+        if (data.classTeamsPending === true && !impersonationToken && !parentToken && !classTeamsSentRef.current) {
+          classTeamsSentRef.current = true;
+          fetch('/api/student/class-teams', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        }
 
         // Remember this answer so the next open can paint before the network replies.
         // Only the plain Microsoft path: an impersonated or parent session is a

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Box, Paper, Typography, Button, UserAvatar } from '@neram/ui';
+import { Box, Paper, Typography, Button } from '@neram/ui';
 import {
   SUGGESTION_LABELS,
   LIFECYCLE_STAGE_LABELS,
@@ -19,6 +19,7 @@ import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import { evidenceLines } from '@/lib/lifecycle-evidence';
 import { formatIstDate } from '@/lib/ops-format';
 import { StatusChip, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 export interface Suggestion {
   id: string;
@@ -91,7 +92,7 @@ export default function SuggestionRow({
     >
       {/* Person */}
       <Box sx={{ display: 'flex', gap: 1.25, minWidth: 0 }}>
-        <UserAvatar src={item.user?.avatar_url} name={name} size={36} tapToView={false} />
+        <PersonAvatar userId={item.user_id} src={item.user?.avatar_url} name={name} size={36} />
         <Box sx={{ minWidth: 0 }}>
           <Link href={`/crm/${item.user_id}`}>
             <Typography

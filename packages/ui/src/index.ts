@@ -18,3 +18,6 @@ export * from './hooks';
 
 // Utilities
 export * from './utils';
+
+// Language mark + the language table (Nexus info ring, Admin PersonAvatar)
+export * from './language';

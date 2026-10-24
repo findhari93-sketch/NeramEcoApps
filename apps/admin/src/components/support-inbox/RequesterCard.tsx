@@ -1,12 +1,13 @@
 'use client';
 
 /** Who raised the ticket: contact, a link to User 360, and their other tickets. */
-import { Avatar, Box, Button, Link, Typography } from '@neram/ui';
+import { Box, Button, Link, Typography } from '@neram/ui';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import CopyablePhone from '@/components/CopyablePhone';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import type { TicketRequesterSummary } from './api';
-import { SegmentChip, Section, TicketStatusChip, initialsOf } from './bits';
+import { SegmentChip, Section, TicketStatusChip } from './bits';
 
 export function RequesterCard({
   requester,
@@ -19,9 +20,7 @@ export function RequesterCard({
   return (
     <Section title="Requester">
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 1.5 }}>
-        <Avatar src={requester.avatar_url || undefined} alt="" sx={{ width: 40, height: 40, bgcolor: 'primary.main', fontSize: 15 }}>
-          {initialsOf(requester.name)}
-        </Avatar>
+        <PersonAvatar userId={requester.user_id} src={requester.avatar_url} name={requester.name} size={40} />
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 15 }} noWrap>
             {requester.name}

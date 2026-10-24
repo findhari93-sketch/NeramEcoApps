@@ -63,6 +63,20 @@ function makePorts(
 }
 
 describe('provisionClassAccount', () => {
+  it('fills job title, department and city as staff did by hand, never a street address', async () => {
+    const { ports, graph } = makePorts({ student: { examYear: 2028, city: 'Chennai', state: 'Tamil Nadu', country: 'India' } });
+    await provisionClassAccount(ports, { userId: 'u1', actorId: 'staff' });
+    const input = graph.createUser.mock.calls[0][0];
+    expect(input).toMatchObject({ jobTitle: 'Student', department: 'NNE28', city: 'Chennai', state: 'Tamil Nadu', country: 'India' });
+    expect(input).not.toHaveProperty('streetAddress');
+  });
+
+  it('leaves the department empty when the exam year is unknown', async () => {
+    const { ports, graph } = makePorts();
+    await provisionClassAccount(ports, { userId: 'u1', actorId: 'staff' });
+    expect(graph.createUser.mock.calls[0][0]).toMatchObject({ jobTitle: 'Student', department: null });
+  });
+
   it('creates Radhika_Bhanuprakash with Radhika@123 and runs every step', async () => {
     const { ports, graph, store } = makePorts();
     const result = await provisionClassAccount(ports, { userId: 'u1', actorId: 'staff' });

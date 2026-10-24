@@ -15,6 +15,7 @@ import { enrolmentPlanLines } from '@neram/database/enrolment-link';
 import { offerFromLink, offerLines } from '@neram/database/student-pay';
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
 import { effectiveStatus, toLinkView } from '@/lib/enrolment-link-server';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 const COURSE_LABEL: Record<string, string> = {
   nata: 'NATA',
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
       if (!sent.success) {
         await logDirectEnrollmentLinkEvent(id, 'email_failed', adminId, { error: sent.error }, supabase);
-        return NextResponse.json({ error: `The email did not send: ${sent.error || 'unknown error'}` }, { status: 502 });
+        return NextResponse.json({ error: `The email did not send: ${sent.error || 'unknown error'}` }, { status: UPSTREAM_FAILED });
       }
       await logDirectEnrollmentLinkEvent(id, 'emailed', adminId, { to: link.student_email }, supabase);
     } else if (channel === 'whatsapp_auto') {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await logDirectEnrollmentLinkEvent(id, 'whatsapp_failed', adminId, { error: sent.error }, supabase);
         return NextResponse.json(
           { error: 'WhatsApp did not send. Use Open WhatsApp instead.', detail: sent.error },
-          { status: 502 }
+          { status: UPSTREAM_FAILED }
         );
       }
       await logDirectEnrollmentLinkEvent(id, 'whatsapp_sent', adminId, { messageId: sent.messageId }, supabase);

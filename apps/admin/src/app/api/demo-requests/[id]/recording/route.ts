@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { demoRecordingPlayUrl } from '@/lib/demo/teams-artifacts';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * GET /api/demo-requests/[id]/recording: a short-lived playable URL for the
@@ -25,12 +26,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!url) {
       return NextResponse.json(
         { error: 'Microsoft did not return the video. It may have been moved or deleted. Open it in OneDrive instead.', webUrl: data.recording_web_url },
-        { status: 502 },
+        { status: UPSTREAM_FAILED },
       );
     }
     return NextResponse.json({ url, name: data.recording_name, webUrl: data.recording_web_url }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('demo recording url failed:', err);
-    return NextResponse.json({ error: 'Could not reach Microsoft. Try again.', webUrl: data.recording_web_url }, { status: 502 });
+    return NextResponse.json({ error: 'Could not reach Microsoft. Try again.', webUrl: data.recording_web_url }, { status: UPSTREAM_FAILED });
   }
 }

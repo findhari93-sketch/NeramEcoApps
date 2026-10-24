@@ -9,7 +9,6 @@
 import { forwardRef, useState } from 'react';
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Chip,
@@ -44,12 +43,13 @@ import {
 import { formatIst } from '@/lib/support-inbox/report-markdown';
 import { OpsSkeleton } from '@/components/ops/OpsUi';
 import type { StaffOption, TicketRequesterSummary } from './api';
-import { TicketStatusChip, initialsOf } from './bits';
+import { TicketStatusChip } from './bits';
 import { ReportPanel } from './ReportPanel';
 import { RequesterCard } from './RequesterCard';
 import { TicketTimeline } from './TicketTimeline';
 import { TicketComposer, type ComposerMode, type SendThen } from './TicketComposer';
 import { TicketStepDialog, type StepMove, type StepPayload } from './TicketStepDialog';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 const DIALOG_MOVES: TicketMove[] = ['resolve', 'close', 'request_info', 'reopen'];
 const PRIORITY_LABEL: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High' };
@@ -222,7 +222,7 @@ export const TicketDetail = forwardRef<
               aria-expanded={!!assignAnchor}
               startIcon={
                 ticket.assignee_name ? (
-                  <Avatar sx={{ width: 24, height: 24, fontSize: 11, bgcolor: 'primary.main' }}>{initialsOf(ticket.assignee_name)}</Avatar>
+                  <PersonAvatar name={ticket.assignee_name} size={18} ring="staff" hideLanguage tooltip={false} />
                 ) : (
                   <PersonAddAltIcon />
                 )
@@ -279,9 +279,7 @@ export const TicketDetail = forwardRef<
               }}
               sx={{ minHeight: 44, gap: 1 }}
             >
-              <Avatar src={s.avatar_url || undefined} alt="" sx={{ width: 26, height: 26, fontSize: 11 }}>
-                {initialsOf(s.name)}
-              </Avatar>
+              <PersonAvatar src={s.avatar_url || null} name={s.name} size={22} ring="staff" hideLanguage tooltip={false} />
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography noWrap sx={{ fontSize: 14 }}>
                   {s.name}

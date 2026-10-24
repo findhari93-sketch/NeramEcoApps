@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { countStuckPhonePeople, createAdminClient, istDayBounds } from '@neram/database';
-import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts, collectionsBadgeCount, istTodayKey } from '@/lib/admin-badges';
+import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts, collectionsBadgeCount, demoBadgeQuery, istTodayKey } from '@/lib/admin-badges';
 import { countReviewQueue } from '@/lib/aintra-inbox/server';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -17,7 +17,7 @@ export async function GET() {
   const supabase = createAdminClient();
   const { chatSince, followUpBefore } = badgeWindow();
   try {
-    const [{ data, error }, reviewQueue, collections, phoneStuck, paymentsToVerify] = await Promise.all([
+    const [{ data, error }, reviewQueue, collections, phoneStuck, paymentsToVerify, demosToCall] = await Promise.all([
       supabase.rpc('admin_badge_counts', {
         p_chat_since: chatSince,
         p_follow_up_before: followUpBefore,
@@ -26,6 +26,7 @@ export async function GET() {
       countCollections(supabase),
       countStuckPhonePeople({ days: 7 }, supabase),
       countPaymentsToVerify(supabase),
+      countDemosToCall(supabase),
     ]);
     if (error) throw error;
     // Aintra Inbox: the badge is the Review queue (wrong or unanswered, not yet
@@ -39,6 +40,9 @@ export async function GET() {
     // Direct Enroll: student-pays links where the student sent a UTR that
     // staff have not verified or rejected yet.
     counts.direct_enrollment = paymentsToVerify;
+    // Demo Classes: the desk's calls to make (see demoBadgeQuery). The SQL
+    // function still counts every pending row, old v1 registrations included.
+    counts.demo_classes = demosToCall;
     return NextResponse.json(counts, { headers: NO_STORE });
   } catch (rpcErr) {
     // The function ships in a migration; until it is applied in an environment,
@@ -48,7 +52,24 @@ export async function GET() {
     counts.collections = await countCollections(supabase);
     counts.phone_stuck = (await countStuckPhonePeople({ days: 7 }, supabase)) ?? 0;
     counts.direct_enrollment = await countPaymentsToVerify(supabase);
+    counts.demo_classes = await countDemosToCall(supabase);
     return NextResponse.json(counts, { headers: NO_STORE });
+  }
+}
+
+/** Demo desk requests waiting on a call: new, or back from Try later. 0 on any error. */
+async function countDemosToCall(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
+  try {
+    const { since, statusFilter } = demoBadgeQuery();
+    const { count, error } = await supabase
+      .from('demo_class_registrations')
+      .select('id', { count: 'exact', head: true })
+      .not('ref_code', 'is', null)
+      .gte('created_at', since)
+      .or(statusFilter);
+    return error ? 0 : count ?? 0;
+  } catch {
+    return 0;
   }
 }
 

@@ -17,14 +17,16 @@ const same = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivi
 
 /** The words of the fullest candidate other than the first name, in their order, or null. */
 export function surnameFrom(firstName: string | null | undefined, candidates: Array<string | null | undefined>): string | null {
-  const first = words(firstName)[0];
+  const given = words(firstName);
+  const first = given[0];
   if (!first) return null;
   let best: string[] = [];
   for (const candidate of candidates) {
     const parts = words(candidate);
-    const at = parts.findIndex((w) => same(w, first));
-    if (at < 0) continue;
-    const rest = parts.filter((_, i) => i !== at);
+    if (!parts.some((w) => same(w, first))) continue;
+    // A first name that already holds more than one word ("Jeshurun Winsley B")
+    // must not get those words again as its surname.
+    const rest = parts.filter((w) => !given.some((g) => same(w, g)));
     if (rest.length > best.length) best = rest;
   }
   return best.length ? best.join(' ') : null;

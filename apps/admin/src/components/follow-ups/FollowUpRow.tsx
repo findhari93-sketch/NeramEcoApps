@@ -19,6 +19,7 @@ import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { describeDue, formatIstDate, humanizeKey } from '@/lib/ops-format';
 import { aintraSessionFromNotes, examYearLabel, followUpKindLabel, followUpSourceLabel } from '@/lib/follow-up-source';
 import { StatusChip, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 export interface FollowUp {
   callback_id: string;
@@ -117,39 +118,47 @@ export default function FollowUpRow({
       }}
     >
       {/* Person */}
-      <Box sx={{ minWidth: 0 }}>
-        {item.user_id ? (
-          <Link href={`/crm/${item.user_id}`}>
-            <Typography
-              component="span"
-              variant="body2"
-              fontWeight={700}
-              sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2, overflowWrap: 'anywhere' }}
-            >
+      <Box sx={{ minWidth: 0, display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+        <PersonAvatar
+          userId={item.user_id}
+          name={name}
+          size={36}
+          facts={{ lifecycleStage: item.lifecycle_stage ?? undefined }}
+        />
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          {item.user_id ? (
+            <Link href={`/crm/${item.user_id}`}>
+              <Typography
+                component="span"
+                variant="body2"
+                fontWeight={700}
+                sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2, overflowWrap: 'anywhere' }}
+              >
+                {name}
+              </Typography>
+            </Link>
+          ) : (
+            <Typography variant="body2" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>
               {name}
             </Typography>
-          </Link>
-        ) : (
-          <Typography variant="body2" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>
-            {name}
-          </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-          {item.person_phone || 'No phone on file'}
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-          {stageLabel && <StatusChip icon={PersonOutlineIcon} label={stageLabel} />}
-          {examLabel && <StatusChip icon={SchoolOutlinedIcon} label={examLabel} />}
-          {!item.user_id && <StatusChip icon={PersonOutlineIcon} label="No account" tone="warning" />}
-          {item.interest_level && (
-            <StatusChip
-              icon={WhatshotIcon}
-              label={INTEREST_LABELS[item.interest_level]}
-              tone={item.interest_level === 'hot' ? 'error' : item.interest_level === 'warm' ? 'warning' : undefined}
-            />
           )}
-          {item.flags?.includes('hard_to_reach') && <StatusChip icon={PhoneDisabledIcon} label="Hard to reach" tone="warning" />}
-          {item.flags?.includes('payment_pending') && <StatusChip icon={PaymentsIcon} label="Payment not received" tone="error" />}
+          <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            {item.person_phone || 'No phone on file'}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+            {stageLabel && <StatusChip icon={PersonOutlineIcon} label={stageLabel} />}
+            {examLabel && <StatusChip icon={SchoolOutlinedIcon} label={examLabel} />}
+            {!item.user_id && <StatusChip icon={PersonOutlineIcon} label="No account" tone="warning" />}
+            {item.interest_level && (
+              <StatusChip
+                icon={WhatshotIcon}
+                label={INTEREST_LABELS[item.interest_level]}
+                tone={item.interest_level === 'hot' ? 'error' : item.interest_level === 'warm' ? 'warning' : undefined}
+              />
+            )}
+            {item.flags?.includes('hard_to_reach') && <StatusChip icon={PhoneDisabledIcon} label="Hard to reach" tone="warning" />}
+            {item.flags?.includes('payment_pending') && <StatusChip icon={PaymentsIcon} label="Payment not received" tone="error" />}
+          </Box>
         </Box>
       </Box>
 

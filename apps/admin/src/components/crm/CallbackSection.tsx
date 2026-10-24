@@ -20,7 +20,6 @@ import {
   Alert,
   Divider,
   CircularProgress,
-  UserAvatar,
 } from '@neram/ui';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -29,6 +28,7 @@ import BlockIcon from '@mui/icons-material/Block';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import PersonIcon from '@mui/icons-material/Person';
 import type { UserJourneyDetail, CallbackOutcome, CallbackRequest, CallbackAttempt } from '@neram/database';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface CallbackSectionProps {
   detail: UserJourneyDetail;
@@ -480,7 +480,7 @@ export default function CallbackSection({
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <UserAvatar name={attempt.admin_name || 'A'} size={22} />
+                      <PersonAvatar name={attempt.admin_name || 'A'} size={18} ring="staff" hideLanguage />
                       <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 12 }}>
                         {attempt.admin_name}
                       </Typography>

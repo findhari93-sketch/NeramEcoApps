@@ -132,7 +132,7 @@ beforeEach(() => {
 });
 
 describe('PATCH /api/students/classification, language', () => {
-  it('refuses a word that is not one of the five languages', async () => {
+  it('refuses a word that is not one of the six languages', async () => {
     const res = await patch({ classroomId: 'c1', studentIds: ['s1'], homeLanguage: 'Tamil' });
     expect(res.status).toBe(400);
     expect(userUpdates()).toHaveLength(0);

@@ -14,11 +14,12 @@ import {
   CircularProgress,
   Chip,
   Divider,
-  UserAvatar,
 } from '@neram/ui';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { UserJourney } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
+import PersonAvatar from '@/components/person/PersonAvatar';
+import { factsFromJourney } from '@/lib/person-avatar';
 
 interface BulkDeleteDialogProps {
   open: boolean;
@@ -211,7 +212,7 @@ export default function BulkDeleteDialog({
                   borderColor: 'grey.100',
                 }}
               >
-                <UserAvatar src={user.avatar_url} name={user.name} size={32} />
+                <PersonAvatar userId={user.id} src={user.avatar_url} name={user.name} size={32} facts={factsFromJourney(user)} tapToView />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={500} noWrap>
                     {user.name || 'Unnamed User'}

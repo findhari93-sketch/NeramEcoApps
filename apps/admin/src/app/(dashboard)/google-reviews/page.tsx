@@ -38,7 +38,6 @@ import {
   Tabs,
   TextField,
   Typography,
-  UserAvatar,
 } from '@neram/ui';
 import SyncIcon from '@mui/icons-material/Sync';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesomeOutlined';
@@ -50,6 +49,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import { StatusChip, a11yRootSx } from '@/components/user360/shared';
 import { copyToClipboard } from '@/lib/whatsapp-templates/whatsapp';
 import { formatDate } from '@/lib/user360-view';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface Run {
   id: string;
@@ -372,7 +372,8 @@ function ReviewCard({ review, centre, connected, onDone }: { review: ReviewRow; 
   return (
     <Paper component="article" variant="outlined" sx={{ p: 2, borderColor: low && !review.reply_comment ? 'rgba(237,108,2,0.45)' : 'grey.200' }} aria-label={`Google review by ${review.reviewer_name || 'a Google user'}`}>
       <Stack direction="row" spacing={1.5} alignItems="center">
-        <UserAvatar name={review.reviewer_name || 'Google user'} src={review.reviewer_photo_url} size={36} clickable={false} />
+        {/* A Google reviewer carries no Neram account id, so no funnel ring is claimed. */}
+        <PersonAvatar name={review.reviewer_name || 'Google user'} src={review.reviewer_photo_url} size={36} ring="other" ringLabel="Google reviewer" />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography sx={{ fontWeight: 700 }}>{review.reviewer_name || 'A Google user'}</Typography>
           <Typography variant="body2" color="text.secondary">

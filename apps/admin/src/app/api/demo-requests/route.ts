@@ -27,6 +27,7 @@ import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages } from '@/lib/demo/server';
 import { DEFAULT_HELD_TUTOR, STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@/lib/demo/staff-add';
 import { DemoTeamsError } from '@/lib/demo/teams';
+import { findPossibleMatches } from '@/lib/demo/people-search';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 import { ConfirmError, confirmDemo, meetingUrl, parseMeetingKind, type ConfirmInput } from '@/lib/demo/confirm';
 import {
@@ -286,6 +287,8 @@ const CLASSES = new Set(['10th', '11th', '12th', '12th-pass', 'other']);
  *                   attended / no-show. An open request of theirs is closed out instead.
  *
  * The person is the picked user, else the one with this phone, else a new lead.
+ * A new lead waits for staff (409 possible_match) when the number is someone's
+ * parent or backup number or the name is already in People; addAsNew skips it.
  * accountHolder 'parent': the picked account is the parent's; the row still
  * carries the student's name and number.
  */
@@ -334,6 +337,17 @@ export async function POST(req: Request) {
     const name = str(body.name, 100) || (accountHolder === 'student' ? str(user?.name, 100) : '');
     if (name.length < 2) throw new AddError('Enter the student name.');
     let createdPerson = false;
+    // Before a new person: the number may be a parent's or backup number of
+    // someone on file, or the name may already be there. Staff choose.
+    if (!user && body.addAsNew !== true) {
+      const matches = await findPossibleMatches(supabase, { phone, name });
+      if (matches.length) {
+        throw new AddError('They may already be in People. Pick them, or add them as a new person.', 409, {
+          code: 'possible_match',
+          matches,
+        });
+      }
+    }
     if (!user) {
       const created = await createUser(
         {

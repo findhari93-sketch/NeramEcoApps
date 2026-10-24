@@ -19,6 +19,7 @@ import {
 import { storedMobile } from '@neram/database/phone';
 import type { DemoRequest } from './types';
 import MobileField from './MobileField';
+import { parentJoiningLabel } from './format';
 
 const CLASS_OPTIONS: Array<{ id: string; label: string }> = [
   { id: '10th', label: 'Class 10' },
@@ -191,7 +192,7 @@ export default function EditDetailsDialog({
           </Box>
           <FormControlLabel
             control={<Switch checked={form.parentJoining} onChange={(e) => set({ parentJoining: e.target.checked })} />}
-            label="A parent is joining the demo"
+            label={parentJoiningLabel(request.status)}
             sx={{ minHeight: 44 }}
           />
         </Box>

@@ -11,7 +11,6 @@ import {
   Skeleton,
   Snackbar,
   Typography,
-  UserAvatar,
 } from '@neram/ui';
 import SupervisorAccountOutlinedIcon from '@mui/icons-material/SupervisorAccountOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
@@ -22,6 +21,7 @@ import AutoMessagesSection from '@/components/crm/AutoMessagesSection';
 import DemoClassSection from '@/components/crm/DemoClassSection';
 import { formatDateTime, isOverdue, relativeTime, sentenceCase } from '@/lib/user360-view';
 import { EmptyNote, SectionCard, TwoColumns, type User360TabProps } from '../shared';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 interface Owner {
   id: string;
@@ -138,7 +138,7 @@ export default function CrmTab({ data, detail, adminId, adminName, onRefresh, fo
                 {ownerOptions.map((o) => (
                   <MenuItem key={o.id} value={o.id} sx={{ minHeight: 44 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <UserAvatar src={o.avatar_url} name={o.name} size={24} clickable={false} />
+                      <PersonAvatar src={o.avatar_url} name={o.name} size={20} ring="staff" hideLanguage tooltip={false} />
                       <span>{o.name || o.email || 'Unnamed staff'}</span>
                     </Box>
                   </MenuItem>

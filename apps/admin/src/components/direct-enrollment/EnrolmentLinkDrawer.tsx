@@ -54,6 +54,7 @@ import InvoiceDownload from './InvoiceDownload';
 import ConfirmDialog from './ConfirmDialog';
 import VerifyPaymentCard from './VerifyPaymentCard';
 import ProofLink from '../payments/ProofLink';
+import PersonAvatar from '@/components/person/PersonAvatar';
 import {
   COUNTRY_CODES,
   COURSE_OPTIONS,
@@ -228,6 +229,7 @@ export default function EnrolmentLinkDrawer({ open, onClose, adminId, prefill, l
   const title =
     mode === 'view' ? 'Enrolment link' : link ? 'Edit enrolment link' : 'New enrolment link';
   const studentName = link?.student_name || prefill?.studentName || form.values.studentName;
+  const studentUserId: string | null = link?.user_id || prefill?.userId || null;
 
   return (
     <Drawer
@@ -253,6 +255,9 @@ export default function EnrolmentLinkDrawer({ open, onClose, adminId, prefill, l
           flexShrink: 0,
         }}
       >
+        {(studentUserId || studentName) && (
+          <PersonAvatar userId={studentUserId} name={studentName || null} size={40} sx={{ mr: 0.5 }} />
+        )}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h6" component="h2" fontWeight={700} noWrap>
             {title}

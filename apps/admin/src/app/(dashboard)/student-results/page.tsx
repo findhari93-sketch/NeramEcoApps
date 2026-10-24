@@ -19,7 +19,6 @@ import {
   Snackbar,
   Tabs,
   Tab,
-  UserAvatar,
   ImageUploadField,
   CircularProgress,
   Paper,
@@ -41,6 +40,8 @@ import FileUploadIcon from '@mui/icons-material/FileUpload';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import type { StudentResult, StudentResultExamType } from '@neram/database';
+import PersonAvatar from '@/components/person/PersonAvatar';
+import { ringForExamYear } from '@/lib/person-avatar';
 
 // ============================================
 // CONSTANTS
@@ -570,7 +571,7 @@ export default function StudentResultsPage() {
                     sx={{ '&:last-child td': { borderBottom: 0 } }}
                   >
                     <TableCell>
-                      <UserAvatar src={row.photo_url} name={row.student_name} size={40} />
+                      <PersonAvatar src={row.photo_url} name={row.student_name} size={40} ring={ringForExamYear(row.exam_year)} tapToView />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight={600}>

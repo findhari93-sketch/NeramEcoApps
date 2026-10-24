@@ -13,11 +13,11 @@ import {
   Button,
   Alert,
   CircularProgress,
-  UserAvatar,
   Divider,
 } from '@neram/ui';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 export interface MarkStaffPerson {
   id: string;
@@ -130,7 +130,7 @@ export default function MarkStaffDialog({ open, people, onClose, onConfirm }: Ma
                 borderColor: 'grey.100',
               }}
             >
-              <UserAvatar src={p.avatar_url} name={p.name} size={28} />
+              <PersonAvatar userId={p.id} src={p.avatar_url} name={p.name} size={28} tapToView />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" fontWeight={500} noWrap>
                   {p.name || 'Unnamed'}

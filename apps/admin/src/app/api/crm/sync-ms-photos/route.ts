@@ -6,6 +6,7 @@ export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { syncMsPhotosBulk } from '@/lib/ms-photo-sync';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 /**
  * POST /api/crm/sync-ms-photos
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     const summary = await syncMsPhotosBulk(userIds);
 
     if (summary.configError) {
-      return NextResponse.json({ success: false, ...summary }, { status: 502 });
+      return NextResponse.json({ success: false, ...summary }, { status: UPSTREAM_FAILED });
     }
     return NextResponse.json({ success: true, ...summary });
   } catch (error: any) {

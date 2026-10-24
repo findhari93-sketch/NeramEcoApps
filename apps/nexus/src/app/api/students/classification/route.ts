@@ -43,7 +43,7 @@ import { englishFluencyAuditValue, isHomeLanguageValue } from '@/lib/student-lan
  *     { classroomId, studentIds: string[],                 // 1..100
  *       studyStage?: '10th'|'11th'|'12th'|'gap_year'|null, // omit = unchanged, null = clear
  *       academicYear?: 'YYYY-YY'|null,                     // omit = unchanged, null = clear
- *       homeLanguage?: 'tamil'|'hindi'|'kannada'|'malayalam'|'english'|null,
+ *       homeLanguage?: 'tamil'|'hindi'|'kannada'|'malayalam'|'telugu'|'english'|null,
  *                                                          // omit = unchanged, null = clear
  *       limitedEnglish?: true|false,                       // omit = unchanged
  *       participationStatus?: 'active'|'dormant',          // omit = unchanged
@@ -220,7 +220,7 @@ export async function PATCH(request: NextRequest) {
       }
       // Validated raw: 'Tamil', 'ta' or 1 must be refused, not coerced into a key.
       if (change.hasLanguage && !isHomeLanguageValue(change.homeLanguage)) {
-        return bad('homeLanguage must be tamil, hindi, kannada, malayalam, english or null');
+        return bad('homeLanguage must be tamil, hindi, kannada, malayalam, telugu, english or null');
       }
       if (change.hasLimited && typeof change.limitedEnglish !== 'boolean') {
         return bad('limitedEnglish must be true or false');

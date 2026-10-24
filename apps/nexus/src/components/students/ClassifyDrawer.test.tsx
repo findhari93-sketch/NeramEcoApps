@@ -54,7 +54,7 @@ describe('ClassifyDrawer language', () => {
     expect(shown()).toBe('');
   });
 
-  it('offers all five languages and nothing else', () => {
+  it('offers all six languages and nothing else', () => {
     setup();
     fireEvent.mouseDown(languageField());
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
@@ -63,6 +63,7 @@ describe('ClassifyDrawer language', () => {
       'हHindi',
       'KKannada',
       'MMalayalam',
+      'TTelugu',
       'English',
     ]);
   });

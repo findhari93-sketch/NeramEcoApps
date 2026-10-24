@@ -35,11 +35,11 @@ import {
   TableRow,
   TextField,
   Typography,
-  UserAvatar,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
 import { REVIEW_PROGRESS_LABELS, type ReviewRequestProgress } from '@neram/database';
 import { rowsNeedingResults, type BatchRow } from '@/lib/review-requests-view';
+import PersonAvatar from '@/components/person/PersonAvatar';
 
 export interface DialogCentre {
   id: string;
@@ -379,7 +379,7 @@ export default function BatchLinksDialog({
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 180 }}>
-                          <UserAvatar name={r.name} src={r.photoUrl} size={32} clickable={false} />
+                          <PersonAvatar userId={r.userId} name={r.name} src={r.photoUrl} size={32} facts={r.isAlumni ? { isAlumni: true } : undefined} />
                           <Box sx={{ minWidth: 0 }}>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                               {r.name}

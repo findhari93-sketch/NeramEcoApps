@@ -11,6 +11,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { NOT_CONNECTED_MESSAGE, getGbpClient } from '@/lib/gbp/server';
 import { recordNotConnected, runGbpSync } from '@/lib/gbp/sync';
 import { MARKETING_CACHE_TAGS, revalidateMarketing } from '@/lib/marketing-revalidate';
+import { UPSTREAM_FAILED } from '@/lib/upstream-status';
 
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdminClient() as any;
@@ -23,5 +24,5 @@ export async function POST(request: NextRequest) {
   if (summary.locations > 0) {
     await revalidateMarketing([MARKETING_CACHE_TAGS.centers], { adminOrigin: request.nextUrl.origin });
   }
-  return NextResponse.json(summary, { status: summary.status === 'failed' ? 502 : 200 });
+  return NextResponse.json(summary, { status: summary.status === 'failed' ? UPSTREAM_FAILED : 200 });
 }
