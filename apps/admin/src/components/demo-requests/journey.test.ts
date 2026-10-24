@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 import {
   closedReason,
+  countNeedsNextStep,
+  demoAt,
   enrolmentOf,
   groupByPerson,
   linkIsReallyPaid,
@@ -77,6 +79,23 @@ describe('stageOf', () => {
     expect(stageOf(parked, null, undefined, new Date('2026-11-23T05:00:00Z'))).toBe('to_call');
     // An ordinary call-back is still To call.
     expect(stageOf(req({ status: 'contacted', last_call_outcome: 'call_back', next_contact_at: '2026-11-23T04:30:00Z' }), null, undefined, new Date('2026-10-23T09:30:00Z'))).toBe('to_call');
+  });
+});
+
+describe('Try later after the demo', () => {
+  const now = new Date('2026-10-24T09:30:00Z');
+  const parked = fu({ status: 'scheduled', flags: ['later'], scheduled_callback_at: '2026-11-23T04:30:00Z' });
+  it('a parked follow-up waits on Later, then comes back to After demo on its date', () => {
+    expect(stageOf(req({ status: 'attended' }), parked, undefined, now)).toBe('later');
+    expect(stageOf(req({ status: 'no_show' }), parked, undefined, now)).toBe('later');
+    expect(stageOf(req({ status: 'attended' }), parked, undefined, new Date('2026-11-23T05:00:00Z'))).toBe('after_demo');
+  });
+  it('an ordinary future follow-up stays After demo, and a stopped one is Closed', () => {
+    expect(stageOf(req({ status: 'attended' }), fu({ scheduled_callback_at: '2026-11-23T04:30:00Z' }), undefined, now)).toBe('after_demo');
+    expect(stageOf(req({ status: 'attended' }), fu({ ...parked, status: 'completed', call_outcome: 'not_interested' }), undefined, now)).toBe('closed');
+  });
+  it('a recorded fee still wins over a park', () => {
+    expect(stageOf(req({ status: 'attended' }), parked, { kind: 'enrolled', on: '2026-10-24' }, now)).toBe('joined');
   });
 });
 
@@ -194,17 +213,40 @@ describe('groupByPerson', () => {
 });
 
 describe('sortPeople', () => {
-  it('After demo: not started first, then the earliest due call', () => {
-    const people = groupByPerson([
-      req({ id: 'late', user_id: 'a', status: 'attended' }),
-      req({ id: 'none', user_id: 'b', status: 'attended' }),
-      req({ id: 'soon', user_id: 'c', status: 'attended' }),
+  // Demos on 24 Sept, 10 Oct, 13 Oct and 20 Oct. "none" has no follow-up; "said" says joined, no fee.
+  const people = groupByPerson([
+    req({ id: 'oct13', user_id: 'a', status: 'attended', scheduled_start: '2026-10-13T09:11:00Z' }),
+    req({ id: 'none', user_id: 'b', status: 'attended', scheduled_start: '2026-10-20T04:30:00Z' }),
+    req({ id: 'sept24', user_id: 'c', status: 'attended', scheduled_start: '2026-09-24T11:24:00Z' }),
+    req({ id: 'said', user_id: 'd', status: 'attended', scheduled_start: '2026-10-10T08:20:00Z' }),
+  ]);
+  const followUps = {
+    oct13: fu({ scheduled_callback_at: '2026-10-17T05:30:00Z' }),
+    sept24: fu({ scheduled_callback_at: '2026-10-21T10:30:00Z' }),
+    said: fu({ status: 'completed', call_outcome: 'joined' }),
+  };
+  it('After demo: needs a next step first, then the oldest demo first', () => {
+    expect(sortPeople('after_demo', people, followUps, {}).map((p) => p.current.id)).toEqual(['said', 'none', 'sept24', 'oct13']);
+    expect(countNeedsNextStep(people, followUps)).toBe(2);
+  });
+  it('After demo: newest demo first keeps the pinned group on top', () => {
+    expect(sortPeople('after_demo', people, followUps, {}, 'newest').map((p) => p.current.id)).toEqual(['none', 'said', 'oct13', 'sept24']);
+  });
+  it('a running follow-up is not pinned, however overdue', () => {
+    expect(countNeedsNextStep(people, { ...followUps, none: fu({ scheduled_callback_at: '2026-10-01T05:30:00Z' }) })).toBe(1);
+  });
+  it('demoAt falls back to attendance, then the request date', () => {
+    expect(demoAt(req({ scheduled_start: '2026-09-24T11:24:00Z' }))).toBe(Date.parse('2026-09-24T11:24:00Z'));
+    expect(demoAt(req({ attendance_marked_at: '2026-09-25T10:00:00Z' }))).toBe(Date.parse('2026-09-25T10:00:00Z'));
+    expect(demoAt(req({}))).toBe(Date.parse('2026-10-10T07:00:00Z'));
+  });
+  it('Later: an after-demo park sorts by its follow-up date', () => {
+    const later = groupByPerson([
+      req({ id: 'parked', user_id: 'a', status: 'attended' }),
+      req({ id: 'asked', user_id: 'b', status: 'contacted', last_call_outcome: 'later', next_contact_at: '2026-11-01T04:30:00Z' }),
     ]);
-    const followUps = {
-      late: fu({ scheduled_callback_at: '2026-10-20T05:30:00Z' }),
-      soon: fu({ scheduled_callback_at: '2026-10-17T05:30:00Z' }),
-    };
-    expect(sortPeople('after_demo', people, followUps, {}).map((p) => p.current.id)).toEqual(['none', 'soon', 'late']);
+    const parked = { parked: fu({ flags: ['later'], scheduled_callback_at: '2026-10-28T04:30:00Z' }) };
+    expect(sortPeople('later', later, parked, {}).map((p) => p.current.id)).toEqual(['parked', 'asked']);
   });
 });
 

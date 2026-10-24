@@ -11,8 +11,12 @@ import {
   resolveFollowUpOwnerId,
   DEMO_FOLLOW_UP_KINDS,
   JOINED_PAYMENT_GRACE_DAYS,
+  LATER_FLAG,
+  FOLLOW_UP_TOPIC_LABELS,
   type DemoFollowUpKind,
+  type FollowUpChannel,
   type FollowUpOutcome,
+  type FollowUpTopic,
   type InterestLevel,
 } from '../utils/demo-follow-up';
 
@@ -31,11 +35,28 @@ export interface DemoFollowUpRow {
   notes: string | null;
   /** The last outcome's reason and note, e.g. "Reason: fees". */
   call_notes: string | null;
+  /** When the last attempt (call or message) was logged. */
+  last_attempt_at: string | null;
+}
+
+/** One logged attempt on a demo follow-up, for the panel's history. */
+export interface DemoFollowUpAttempt {
+  id: string;
+  callback_request_id: string;
+  admin_name: string;
+  outcome: string;
+  comments: string | null;
+  rescheduled_to: string | null;
+  attempted_at: string;
+  channel: FollowUpChannel;
+  topic: FollowUpTopic | null;
+  message_sent: string | null;
+  reply: string | null;
 }
 
 const OPEN = ['pending', 'scheduled', 'attempted'];
 const COLS =
-  'id, user_id, status, query_type, scheduled_callback_at, interest_level, flags, call_outcome, completed_at, assigned_to, demo_registration_id, notes, call_notes';
+  'id, user_id, status, query_type, scheduled_callback_at, interest_level, flags, call_outcome, completed_at, assigned_to, demo_registration_id, notes, call_notes, last_attempt_at';
 
 export async function resolveDemoFollowUpOwner(userId: string, client?: TypedSupabaseClient): Promise<string | null> {
   const supabase = client || getSupabaseAdminClient();
@@ -106,7 +127,12 @@ export async function openDemoFollowUp(
     ...(input.note ? { notes: input.note } : {}),
   };
   if (existing) {
-    const { error } = await supabase.from('callback_requests').update(base).eq('id', existing.id);
+    // A fresh follow-up date un-parks a Try later row.
+    const flags = (existing.flags || []).filter((f) => f !== LATER_FLAG);
+    const { error } = await supabase
+      .from('callback_requests')
+      .update({ ...base, ...(flags.length !== (existing.flags || []).length ? { flags } : {}) })
+      .eq('id', existing.id);
     if (error) throw error;
     return { id: existing.id, created: false };
   }
@@ -139,6 +165,11 @@ export async function logDemoFollowUpOutcome(
     note?: string | null;
     reason?: string | null;
     interest?: InterestLevel | null;
+    /** How they were reached; a message sent is always WhatsApp. */
+    channel?: FollowUpChannel;
+    topic?: FollowUpTopic | null;
+    messageSent?: string | null;
+    reply?: string | null;
     admin: { id: string; name: string };
   },
   client?: TypedSupabaseClient,
@@ -184,7 +215,18 @@ export async function logDemoFollowUpOutcome(
   });
   if ('error' in result) return { error: result.error };
 
-  const comment = [input.reason ? `Reason: ${input.reason}` : null, input.note || null, input.interest ? `Interest: ${input.interest}` : null]
+  const channel: FollowUpChannel = input.outcome === 'message_sent' ? 'whatsapp' : input.channel ?? 'call';
+  const sent =
+    input.outcome === 'message_sent'
+      ? `Sent on WhatsApp${input.topic ? ` (${FOLLOW_UP_TOPIC_LABELS[input.topic]})` : ''}, waiting for a reply`
+      : null;
+  const comment = [
+    sent,
+    input.reason ? `Reason: ${input.reason}` : null,
+    input.reply ? `Reply: ${input.reply.slice(0, 160)}` : null,
+    input.note || null,
+    input.interest ? `Interest: ${input.interest}` : null,
+  ]
     .filter(Boolean)
     .join('. ');
   const { error: attemptErr } = await supabase.from('callback_attempts').insert({
@@ -195,6 +237,10 @@ export async function logDemoFollowUpOutcome(
     outcome: result.attemptOutcome,
     comments: comment || null,
     rescheduled_to: result.scheduledAt,
+    channel,
+    topic: input.topic ?? null,
+    message_sent: input.outcome === 'message_sent' ? input.messageSent || null : null,
+    reply: input.reply || null,
   });
   if (attemptErr) throw attemptErr;
 
@@ -213,6 +259,47 @@ export async function logDemoFollowUpOutcome(
       flags: Array.from(flags),
       ...(input.interest ? { interest_level: input.interest } : {}),
       ...(result.status === 'completed' ? { completed_at: now.toISOString() } : {}),
+    })
+    .eq('id', row.id);
+  if (error) throw error;
+  return {};
+}
+
+/**
+ * "Try later" after the demo: the family asked us to wait. The open follow-up
+ * keeps running but is parked until `at` (the desk shows it on the Later tab),
+ * and the call is logged so the timeline says why.
+ */
+export async function parkDemoFollowUp(
+  input: { callbackId: string; at: Date; reason: string; admin: { id: string; name: string } },
+  client?: TypedSupabaseClient,
+): Promise<{ error?: string }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: row, error: rowErr } = await supabase.from('callback_requests').select(COLS + ', attempt_count').eq('id', input.callbackId).maybeSingle();
+  if (rowErr) throw rowErr;
+  if (!row || !OPEN.includes(row.status)) return { error: 'Start a follow-up first.' };
+  const now = new Date();
+  const comment = `Later: ${input.reason}`;
+  const { error: attemptErr } = await supabase.from('callback_attempts').insert({
+    callback_request_id: row.id,
+    user_id: row.user_id,
+    admin_id: input.admin.id,
+    admin_name: input.admin.name,
+    outcome: 'thinking',
+    comments: comment,
+    rescheduled_to: input.at.toISOString(),
+  });
+  if (attemptErr) throw attemptErr;
+  const { error } = await supabase
+    .from('callback_requests')
+    .update({
+      status: 'scheduled',
+      scheduled_callback_at: input.at.toISOString(),
+      call_outcome: 'thinking',
+      call_notes: comment,
+      last_attempt_at: now.toISOString(),
+      attempt_count: (row.attempt_count || 0) + 1,
+      flags: Array.from(new Set([...(row.flags || []), LATER_FLAG])),
     })
     .eq('id', row.id);
   if (error) throw error;
@@ -299,6 +386,23 @@ export async function sweepDemoFollowUps(now: Date, client?: TypedSupabaseClient
     }
   }
   return { closed, reopened };
+}
+
+/** Every logged attempt on this demo's follow-ups (stopped and reopened ones too), newest first. */
+export async function listDemoFollowUpAttempts(demoId: string, client?: TypedSupabaseClient): Promise<DemoFollowUpAttempt[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: rows, error: rowsErr } = await supabase.from('callback_requests').select('id').eq('demo_registration_id', demoId);
+  if (rowsErr) throw rowsErr;
+  const ids = (rows || []).map((r) => r.id);
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('callback_attempts')
+    .select('id, callback_request_id, admin_name, outcome, comments, rescheduled_to, attempted_at, channel, topic, message_sent, reply')
+    .in('callback_request_id', ids)
+    .order('attempted_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data || []) as DemoFollowUpAttempt[];
 }
 
 /** Latest demo follow-up per demo request, for the desk's Done tab. */

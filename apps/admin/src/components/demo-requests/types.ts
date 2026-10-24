@@ -5,6 +5,7 @@ import type {
   DemoHost,
   DemoScheduleSettings,
   DemoFollowUpRow,
+  DemoFollowUpAttempt,
   FeeView,
 } from '@neram/database';
 import type { DemoEnrolment } from './journey';
@@ -50,6 +51,8 @@ export interface DeskDetail {
   followUp: DemoFollowUpRow | null;
   /** This demo's newest follow-up, open or closed. */
   lastFollowUp: DemoFollowUpRow | null;
+  /** Every call and message logged on this demo's follow-ups, newest first. */
+  followUpAttempts?: DemoFollowUpAttempt[];
   /** The student's enrolment link (active first), made from any screen. */
   enrolmentLink?: DeskEnrolmentLink | null;
   /** Staff who added the demo; null when it came from the website. */

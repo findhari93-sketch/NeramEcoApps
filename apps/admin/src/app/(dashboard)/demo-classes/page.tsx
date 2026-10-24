@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Alert, Box, Button, Paper, Tab, Tabs, Typography } from '@neram/ui';
+import { Alert, Box, Button, Paper, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
@@ -18,7 +18,17 @@ import WhatsAppHealthDialog from '@/components/demo-requests/WhatsAppHealthDialo
 import AddDemoDialog from '@/components/demo-requests/AddDemoDialog';
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 import type { DeskDetail, DeskList } from '@/components/demo-requests/types';
-import { DESK_STAGES, groupByPerson, sortPeople, stageOf, type DemoEnrolment, type DeskPerson, type DeskStage } from '@/components/demo-requests/journey';
+import {
+  DESK_STAGES,
+  countNeedsNextStep,
+  groupByPerson,
+  sortPeople,
+  stageOf,
+  type DemoDateOrder,
+  type DemoEnrolment,
+  type DeskPerson,
+  type DeskStage,
+} from '@/components/demo-requests/journey';
 import AvatarKey from '@/components/person/AvatarKey';
 
 const EMPTY: Record<DeskStage, { title: string; body: string }> = {
@@ -26,9 +36,28 @@ const EMPTY: Record<DeskStage, { title: string; body: string }> = {
   scheduled: { title: 'No demos scheduled', body: 'Confirm a request, or use Add demo > Demo planned for one fixed on WhatsApp.' },
   after_demo: { title: 'No follow-ups running', body: 'After a demo, students stay here until they join or say no.' },
   joined: { title: 'Nobody has enrolled after a demo yet', body: 'Students show here once their fee is recorded or their payment is verified.' },
-  later: { title: 'Nobody waiting for later', body: 'When a family asks you to check back, use Try later. They wait here and come back to To call on that date.' },
+  later: { title: 'Nobody waiting for later', body: 'When a family asks you to check back, use Try later. They wait here and come back on that date.' },
   closed: { title: 'Nothing closed', body: 'Not interested, joined another class, cancelled and stopped follow-ups are kept here with the reason.' },
 };
+
+/** The After demo order, remembered per browser. */
+const ORDER_KEY = 'demo-desk.afterDemoOrder';
+
+function readOrder(): DemoDateOrder {
+  try {
+    return window.localStorage.getItem(ORDER_KEY) === 'newest' ? 'newest' : 'oldest';
+  } catch {
+    return 'oldest';
+  }
+}
+
+function saveOrder(order: DemoDateOrder) {
+  try {
+    window.localStorage.setItem(ORDER_KEY, order);
+  } catch {
+    // Private window or blocked storage: the choice lasts until reload.
+  }
+}
 
 /** Below MUI lg: list and details take turns instead of sitting side by side. */
 const NARROW = '(max-width: 1199.95px)';
@@ -76,6 +105,11 @@ function DemoDesk() {
   // A staff-added request with a time already agreed opens Confirm straight away.
   const [confirmFor, setConfirmFor] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [order, setOrder] = useState<DemoDateOrder>('oldest');
+
+  useEffect(() => {
+    setOrder(readOrder());
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -201,8 +235,12 @@ function DemoDesk() {
   }, [people, stageOfPerson]);
 
   const rows = useMemo(
-    () => (list ? sortPeople(tab, people.filter((p) => stageOfPerson(p) === tab), list.followUps ?? {}, list.enrolment ?? {}) : []),
-    [list, people, tab, stageOfPerson],
+    () => (list ? sortPeople(tab, people.filter((p) => stageOfPerson(p) === tab), list.followUps ?? {}, list.enrolment ?? {}, order) : []),
+    [list, people, tab, stageOfPerson, order],
+  );
+  const needsStep = useMemo(
+    () => (list && tab === 'after_demo' ? countNeedsNextStep(rows, list.followUps ?? {}) : 0),
+    [list, rows, tab],
   );
   const selectedPerson = personOf(selectedId);
 
@@ -303,17 +341,57 @@ function DemoDesk() {
           ) : rows.length === 0 ? (
             <EmptyState icon={InboxIcon} title={EMPTY[tab].title} body={EMPTY[tab].body} />
           ) : (
-            <RequestList
-              people={rows}
-              stage={tab}
-              selectedId={selectedId}
-              onSelect={(id) => select(id)}
-              schedule={list.settings.schedule}
-              hosts={list.settings.hosts}
-              now={now}
-              followUps={list.followUps ?? {}}
-              enrolment={list.enrolment ?? {}}
-            />
+            <>
+              {tab === 'after_demo' && (
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}
+                >
+                  <Typography variant="body2" color={needsStep ? 'warning.dark' : 'text.secondary'} fontWeight={needsStep ? 600 : 400}>
+                    {needsStep
+                      ? `${needsStep} ${needsStep === 1 ? 'needs' : 'need'} a next step (no follow-up running), shown first.`
+                      : 'Every student here has a follow-up running.'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography id="demo-order-label" variant="body2" color="text.secondary">
+                      Demo date
+                    </Typography>
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={order}
+                      onChange={(_, v: DemoDateOrder | null) => {
+                        if (!v) return;
+                        setOrder(v);
+                        saveOrder(v);
+                      }}
+                      aria-labelledby="demo-order-label"
+                      sx={{
+                        '& .MuiToggleButton-root': {
+                          minHeight: 44,
+                          px: 2,
+                          textTransform: 'none',
+                          '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                        },
+                      }}
+                    >
+                      <ToggleButton value="oldest">Oldest first</ToggleButton>
+                      <ToggleButton value="newest">Newest first</ToggleButton>
+                    </ToggleButtonGroup>
+                  </Box>
+                </Box>
+              )}
+              <RequestList
+                people={rows}
+                stage={tab}
+                selectedId={selectedId}
+                onSelect={(id) => select(id)}
+                schedule={list.settings.schedule}
+                hosts={list.settings.hosts}
+                now={now}
+                followUps={list.followUps ?? {}}
+                enrolment={list.enrolment ?? {}}
+              />
+            </>
           )}
         </Box>
         {selectedId && list && (

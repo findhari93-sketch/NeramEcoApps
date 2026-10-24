@@ -186,6 +186,9 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Server-side totals for every status, so KPIs don't depend on the loaded page.
+  const [statusCounts, setStatusCounts] = useState({ total: 0, read: 0, replied: 0 });
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -243,12 +246,14 @@ export default function MessagesPage() {
     }
   }, [page, rowsPerPage, statusFilter]);
 
-  const fetchUnreadCount = useCallback(async () => {
+  const fetchCounts = useCallback(async () => {
     try {
-      const res = await fetch('/api/messages/unread-count');
+      const res = await fetch('/api/messages/counts');
       if (res.ok) {
         const data = await res.json();
-        setUnreadCount(data.count || 0);
+        setUnreadCount(data.unread || 0);
+        setStatusCounts({ total: data.total || 0, read: data.read || 0, replied: data.replied || 0 });
+        setWhatsappEnabled(!!data.whatsappRepliesEnabled);
       }
     } catch {
       // Silently fail for badge count
@@ -260,8 +265,8 @@ export default function MessagesPage() {
   }, [fetchMessages]);
 
   useEffect(() => {
-    fetchUnreadCount();
-  }, [fetchUnreadCount]);
+    fetchCounts();
+  }, [fetchCounts]);
 
   const handleStatusFilterChange = (_event: React.SyntheticEvent, newValue: StatusFilter) => {
     setStatusFilter(newValue);
@@ -355,7 +360,7 @@ export default function MessagesPage() {
         )
       );
       setSelectedMessage((prev) => (prev ? { ...prev, status: 'replied' as const } : null));
-      fetchUnreadCount();
+      fetchCounts();
     } catch (err: any) {
       setSnackbar({
         open: true,
@@ -399,18 +404,16 @@ export default function MessagesPage() {
       }
 
       if (refreshAfter) {
-        fetchUnreadCount();
+        fetchCounts();
       }
     } catch (err: any) {
       console.error('Error updating message status:', err);
+      setSnackbar({ open: true, message: err.message || 'Could not update the message status', severity: 'error' });
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Calculate stats from current data
-  const readCount = messages.filter((m) => m.status === 'read').length;
-  const repliedCount = messages.filter((m) => m.status === 'replied').length;
 
   return (
     <Box>
@@ -445,7 +448,7 @@ export default function MessagesPage() {
         </Box>
         <Tooltip title="Refresh data">
           <span>
-            <IconButton size="small" onClick={() => { fetchMessages(); fetchUnreadCount(); }} disabled={loading}>
+            <IconButton size="small" onClick={() => { fetchMessages(); fetchCounts(); }} disabled={loading}>
               <RefreshIcon fontSize="small" />
             </IconButton>
           </span>
@@ -463,7 +466,7 @@ export default function MessagesPage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <StatCard
           title="Total Messages"
-          value={totalCount}
+          value={statusCounts.total}
           icon={<MailOutlinedIcon sx={{ color: '#7B1FA2', fontSize: 22 }} />}
           color="#7B1FA2"
           loading={loading && messages.length === 0}
@@ -477,14 +480,14 @@ export default function MessagesPage() {
         />
         <StatCard
           title="Read"
-          value={statusFilter === 'all' ? readCount : statusFilter === 'read' ? totalCount : readCount}
+          value={statusCounts.read}
           icon={<DraftsIcon sx={{ color: '#E65100', fontSize: 22 }} />}
           color="#E65100"
           loading={loading && messages.length === 0}
         />
         <StatCard
           title="Replied"
-          value={statusFilter === 'all' ? repliedCount : statusFilter === 'replied' ? totalCount : repliedCount}
+          value={statusCounts.replied}
           icon={<DoneAllIcon sx={{ color: '#2E7D32', fontSize: 22 }} />}
           color="#2E7D32"
           loading={loading && messages.length === 0}
@@ -842,9 +845,11 @@ export default function MessagesPage() {
               </Button>
               <Tooltip
                 title={
-                  !selectedMessage?.phone
-                    ? 'No phone number available'
-                    : 'WhatsApp (coming soon, pending Meta approval)'
+                  !whatsappEnabled
+                    ? 'WhatsApp replies are not switched on yet (pending Meta approval)'
+                    : !selectedMessage?.phone
+                      ? 'No phone number available'
+                      : 'Send this reply on WhatsApp'
                 }
               >
                 <span>
@@ -853,7 +858,7 @@ export default function MessagesPage() {
                     color="success"
                     startIcon={replySending === 'whatsapp' ? <CircularProgress size={16} color="inherit" /> : <WhatsAppIcon />}
                     onClick={() => handleSendReply('whatsapp')}
-                    disabled={!replyText.trim() || !!replySending || !selectedMessage?.phone}
+                    disabled={!whatsappEnabled || !replyText.trim() || !!replySending || !selectedMessage?.phone}
                   >
                     Send via WhatsApp
                   </Button>
@@ -873,9 +878,17 @@ export default function MessagesPage() {
         open={snackbar.open}
         autoHideDuration={4000}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        message={snackbar.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      />
+      >
+        <Alert
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

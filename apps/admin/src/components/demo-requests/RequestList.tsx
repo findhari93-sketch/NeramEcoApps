@@ -15,7 +15,7 @@ import {
   Chip,
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
+import { INTEREST_LABELS, awaitingReply } from '@neram/database/demo-follow-up';
 import { formatDemoDateTime } from '@neram/database/demo-schedule';
 import { formatRupees, formatDueDate } from '@neram/database/fee-plan';
 import type { DemoFollowUpRow, InterestLevel } from '@neram/database';
@@ -33,7 +33,7 @@ import { NO_SHOW_AFTER_END_MIN } from '@/lib/demo/demo-verdict';
 import type { DemoScheduleSettings, DemoHost } from './types';
 import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage, type ProfileFee } from './journey';
 import { ago, classLabel, isCallbackDue, isOverdueNew, parentJoiningLabel, telHref, waHref, whenLabel } from './format';
-import { formatLaterDate } from '@/lib/demo/try-later';
+import { formatLaterDate, isParkedAfterDemo, parkedReason } from '@/lib/demo/try-later';
 import DemoPersonAvatar from './DemoPersonAvatar';
 
 /**
@@ -110,6 +110,12 @@ function FollowUpCell({ f, now }: { f: DemoFollowUpRow | undefined; now: Date })
       <Typography component="span" variant="body2" sx={{ color: late ? 'error.main' : 'text.primary', fontWeight: late ? 700 : 400 }}>
         {due ? `${late ? 'Overdue, ' : ''}${formatDemoDateTime(due)}` : 'No date'}
       </Typography>
+      {awaitingReply(f) && f!.last_attempt_at && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexBasis: '100%' }}>
+          <WhatsAppIcon aria-hidden sx={{ fontSize: 14, color: 'success.dark' }} />
+          WhatsApp sent {ago(f!.last_attempt_at, now)}, no reply yet
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -157,6 +163,9 @@ export default function RequestList({
             const start = r.scheduled_start ? new Date(r.scheduled_start) : null;
             const f = followUps[r.id];
             const e = enrolment[r.id];
+            // Later holds both: asked to wait before the demo, or a follow-up parked after it.
+            const parkedAfterDemo = stage === 'later' && isParkedAfterDemo(f, now);
+            const laterAt = parkedAfterDemo ? f!.scheduled_callback_at : r.next_contact_at;
             return (
               <TableRow
                 key={p.key}
@@ -224,9 +233,16 @@ export default function RequestList({
 
                 <TableCell sx={{ minWidth: 180 }}>
                   {stage === 'later' ? (
-                    <Typography variant="body2" sx={{ whiteSpace: 'normal', maxWidth: 280 }}>
-                      {r.later_reason || 'Asked us to wait'}
-                    </Typography>
+                    <>
+                      <Typography variant="body2" sx={{ whiteSpace: 'normal', maxWidth: 280 }}>
+                        {(parkedAfterDemo ? parkedReason(f) : r.later_reason) || 'Asked us to wait'}
+                      </Typography>
+                      {parkedAfterDemo && (
+                        <Typography variant="caption" color="text.secondary">
+                          After the demo
+                        </Typography>
+                      )}
+                    </>
                   ) : (
                     <Typography variant="body2">{when.primary}</Typography>
                   )}
@@ -311,10 +327,10 @@ export default function RequestList({
                     </Box>
                   )}
 
-                  {stage === 'later' && r.next_contact_at && (
+                  {stage === 'later' && laterAt && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <ScheduleIcon aria-hidden sx={{ fontSize: 16, color: 'text.secondary' }} />
-                      <Typography variant="body2">{formatLaterDate(r.next_contact_at)}</Typography>
+                      <Typography variant="body2">{formatLaterDate(laterAt)}</Typography>
                     </Box>
                   )}
 

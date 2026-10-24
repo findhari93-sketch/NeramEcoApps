@@ -5,7 +5,7 @@
  */
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 
-import { isParkedLater } from '@/lib/demo/try-later';
+import { isParkedAfterDemo, isParkedLater } from '@/lib/demo/try-later';
 
 export { meetingKindOf, MEETING_LABELS } from '@/lib/demo/meeting';
 
@@ -16,7 +16,7 @@ export const DESK_STAGES: Array<{ id: DeskStage; label: string; hint: string }> 
   { id: 'scheduled', label: 'Scheduled', hint: 'Demo time fixed' },
   { id: 'after_demo', label: 'After demo', hint: 'Follow up until they join or say no' },
   { id: 'joined', label: 'Enrolled', hint: 'Paid the fee after the demo' },
-  { id: 'later', label: 'Later', hint: 'Asked us to wait. Back in To call on the try-again date' },
+  { id: 'later', label: 'Later', hint: 'Asked us to wait. Comes back on the try-again date' },
   { id: 'closed', label: 'Closed', hint: 'Not interested, joined another class, cancelled, or follow-up stopped' },
 ];
 
@@ -143,7 +143,7 @@ export function saysJoinedNoFee(
  */
 export function stageOf(
   r: Pick<DemoRequest, 'status'> & Partial<Pick<DemoRequest, 'last_call_outcome' | 'next_contact_at'>>,
-  followUp: Pick<DemoFollowUpRow, 'status' | 'call_outcome'> | null | undefined,
+  followUp: (Pick<DemoFollowUpRow, 'status' | 'call_outcome'> & Partial<Pick<DemoFollowUpRow, 'flags' | 'scheduled_callback_at'>>) | null | undefined,
   enrolment: DemoEnrolment | null | undefined,
   now: Date = new Date(),
 ): DeskStage {
@@ -159,6 +159,8 @@ export function stageOf(
       return 'scheduled';
     case 'attended':
     case 'no_show':
+      // Parked by "Try later" after the demo; back in After demo on its date.
+      if (isParkedAfterDemo(followUp, now)) return 'later';
       // "Joined" without a fee stays here until staff record the payment.
       if (followUp && followUp.status === 'completed' && followUp.call_outcome !== 'joined') return 'closed';
       return 'after_demo';
@@ -201,12 +203,34 @@ export function groupByPerson(requests: DemoRequest[]): DeskPerson[] {
 
 const t = (s: string | null | undefined, fallback = Number.MAX_SAFE_INTEGER) => (s ? new Date(s).getTime() : fallback);
 
+/** After demo order by demo date: the oldest demo first (default), or the newest. */
+export type DemoDateOrder = 'oldest' | 'newest';
+
+/** When the demo happened: its time, else when attendance was marked, else when it was asked for. */
+export function demoAt(r: Pick<DemoRequest, 'scheduled_start' | 'attendance_marked_at' | 'created_at'>): number {
+  return t(r.scheduled_start || r.attendance_marked_at || r.created_at, 0);
+}
+
+/**
+ * After demo, one action from Enrolled or Closed: no follow-up is running. That
+ * covers "not started" and "said they joined" (fee not recorded or not
+ * finalised), whose follow-up closed as Joined. These go to the top.
+ */
+export function needsNextStep(followUp: Pick<DemoFollowUpRow, 'status'> | null | undefined): boolean {
+  return !isFollowUpOpen(followUp);
+}
+
+export function countNeedsNextStep(people: DeskPerson[], followUps: Record<string, DemoFollowUpRow>): number {
+  return people.filter((p) => needsNextStep(followUps[p.current.id])).length;
+}
+
 /** Order within a tab: what needs a human first. */
 export function sortPeople(
   stage: DeskStage,
   people: DeskPerson[],
   followUps: Record<string, DemoFollowUpRow>,
   enrolment: Record<string, DemoEnrolment>,
+  order: DemoDateOrder = 'oldest',
 ): DeskPerson[] {
   const copy = [...people];
   const c = (p: DeskPerson) => p.current;
@@ -216,18 +240,21 @@ export function sortPeople(
       return copy.sort((a, b) => t(c(a).next_contact_at) - t(c(b).next_contact_at) || t(c(a).created_at) - t(c(b).created_at));
     case 'scheduled':
       return copy.sort((a, b) => t(c(a).scheduled_start) - t(c(b).scheduled_start));
-    case 'later':
-      // Soonest try-again date first.
-      return copy.sort((a, b) => t(c(a).next_contact_at) - t(c(b).next_contact_at));
-    case 'after_demo':
-      // Not started first (needs a date), then the earliest due call.
-      return copy.sort((a, b) => {
-        const fa = followUps[c(a).id];
-        const fb = followUps[c(b).id];
-        const da = isFollowUpOpen(fa) ? t(fa!.scheduled_callback_at) : -1;
-        const db = isFollowUpOpen(fb) ? t(fb!.scheduled_callback_at) : -1;
-        return da - db;
-      });
+    case 'later': {
+      // Soonest try-again date first: the request's date, or the parked follow-up's after a demo.
+      const due = (p: DeskPerson) => {
+        const f = followUps[c(p).id];
+        return ['attended', 'no_show'].includes(c(p).status) && f ? t(f.scheduled_callback_at) : t(c(p).next_contact_at);
+      };
+      return copy.sort((a, b) => due(a) - due(b));
+    }
+    case 'after_demo': {
+      // Needs a next step first (no follow-up running), then the
+      // rest; each group by demo date in the chosen direction.
+      const pinned = (p: DeskPerson) => (needsNextStep(followUps[c(p).id]) ? 0 : 1);
+      const dir = order === 'newest' ? -1 : 1;
+      return copy.sort((a, b) => pinned(a) - pinned(b) || dir * (demoAt(c(a)) - demoAt(c(b))));
+    }
     case 'joined': {
       const j = (p: DeskPerson) => {
         const e = enrolment[p.current.id];

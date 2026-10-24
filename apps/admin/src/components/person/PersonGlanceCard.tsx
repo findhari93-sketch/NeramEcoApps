@@ -23,6 +23,7 @@ import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { AvatarRing, Box, Typography, type AvatarRingVariant } from '@neram/ui';
 import { LIFECYCLE_STAGE_LABELS } from '@neram/database';
 import {
+  HOT_LEAD_COLOR,
   RING_LABEL,
   activityLine,
   avatarLanguageSentence,
@@ -42,7 +43,7 @@ function Line({ icon, children, tone }: { icon: ReactNode; children: ReactNode; 
         sx={{
           display: 'inline-flex',
           mt: '1px',
-          color: tone === 'hot' ? '#C2410C' : 'text.secondary',
+          color: tone === 'hot' ? HOT_LEAD_COLOR : 'text.secondary',
           '& svg': { fontSize: 16 },
         }}
       >
@@ -62,6 +63,7 @@ export default function PersonGlanceCard({
   facts,
   language,
   loading,
+  editable = false,
 }: {
   name: string | null;
   ring: AvatarRingVariant;
@@ -69,6 +71,8 @@ export default function PersonGlanceCard({
   facts: Partial<PersonFacts>;
   language: AvatarLanguage | null;
   loading: boolean;
+  /** The avatar opens the quick editor on click: say so, since a hover card cannot be clicked. */
+  editable?: boolean;
 }) {
   const funnel = showsGlanceMarks(ring);
   const study = funnel ? studyLine(facts) : null;
@@ -119,6 +123,15 @@ export default function PersonGlanceCard({
       {classroom && <Line icon={<GroupsOutlinedIcon />}>{classroom}</Line>}
       {stage && <Line icon={<FlagOutlinedIcon />}>{stage}</Line>}
       {activity && <Line icon={<ScheduleIcon />}>{activity}</Line>}
+      {editable && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ pt: 0.75, mt: 0.25, borderTop: 1, borderColor: 'divider', lineHeight: 1.4 }}
+        >
+          Click to set class or language
+        </Typography>
+      )}
     </Box>
   );
 }

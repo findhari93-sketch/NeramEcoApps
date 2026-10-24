@@ -226,10 +226,42 @@ export default function LeadsPage() {
       });
       if (!res.ok) throw new Error('Failed to update user access');
       await fetchLeads();
+      setSnackbar({
+        open: true,
+        message: user.is_disabled ? 'Account enabled' : 'Account disabled',
+        severity: 'success',
+      });
     } catch (err: any) {
-      console.error('Disable toggle error:', err);
+      setSnackbar({ open: true, message: err.message || 'Failed to update user access', severity: 'error' });
     }
   };
+
+  // Mark a lead as dead or irrelevant from the row menu. UsersTable only shows
+  // these menu items when a handler is passed, so they must be wired here.
+  const markLead = async (user: UserJourney, kind: 'dead-lead' | 'irrelevant') => {
+    if (!supabaseUserId) {
+      setSnackbar({ open: true, message: 'Admin profile not loaded yet. Refresh and try again.', severity: 'error' });
+      return;
+    }
+    const label = kind === 'dead-lead' ? 'dead lead' : 'irrelevant';
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Marked from Leads table', adminId: supabaseUserId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to mark as ${label}`);
+      }
+      await fetchLeads();
+      setSnackbar({ open: true, message: `${user.name || 'Lead'} marked as ${label}`, severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || `Failed to mark as ${label}`, severity: 'error' });
+    }
+  };
+  const handleMarkDeadLead = (user: UserJourney) => markLead(user, 'dead-lead');
+  const handleMarkIrrelevant = (user: UserJourney) => markLead(user, 'irrelevant');
 
   const handleBulkDeleteRequest = (selectedUsers: UserJourney[]) => {
     setUsersToDelete(selectedUsers);
@@ -495,6 +527,8 @@ export default function LeadsPage() {
           onBulkDeleteRequest={handleBulkDeleteRequest}
           onDiagnosticsClick={handleDiagnosticsClick}
           onDisableToggle={handleDisableToggle}
+          onMarkDeadLead={handleMarkDeadLead}
+          onMarkIrrelevant={handleMarkIrrelevant}
           isFullscreen={isFullscreen}
         />
       </Paper>

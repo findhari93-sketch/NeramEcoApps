@@ -95,11 +95,12 @@ export default function AvatarKey() {
                 size={48}
                 tooltip={false}
                 facts={{ userType: 'lead', interest: 'hot', examYear: 2027, engagement: 'engaged', homeLanguage: 'tamil' }}
+                editable={false}
               />
             </Box>
             <Box component="ul" sx={{ m: 0, pl: 0, listStyle: 'none', display: 'grid', gap: 0.5 }}>
               {[
-                ['Top right', 'Exam year: 27 is the 2027 exam'],
+                ['Top right', 'Exam year: 27 is the 2027 exam. Orange: a break year (finished 12th, has results)'],
                 ['Top left', 'Flame: a hot lead'],
                 ['Bottom left', 'Their language'],
                 ['Bottom right', 'Green dot: active this week'],
@@ -111,7 +112,8 @@ export default function AvatarKey() {
             </Box>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-            Hover any photo for a short card: class, language, place, classroom, stage and last active.
+            Hover any photo for a short card: class, language, place, classroom, stage and last active. Click a
+            student or lead's photo to set their class or language.
           </Typography>
 
           <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.5, mt: 0.5 }}>

@@ -7,6 +7,10 @@
  * its corners and hover card show (exam year, class, place, classroom,
  * activity, and the interest logged on an open follow-up).
  *
+ * The class (Class 10, 11, 12 or a break year) is resolved here from four
+ * places, first set wins: the Nexus enrolment, staff (users.study_stage), the
+ * application form and the newest demo booking. See lib/person-study.ts.
+ *
  * Body:
  *   ids     users.id values on screen (deduped, at most 500)
  *   places  people with no account yet (a staff-added demo request), keyed by
@@ -19,10 +23,11 @@
  * page of ids does not fit a URL, and it is per-screen data, so nothing to cache.
  */
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, mapClassToStandard } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import type { LanguageGuess, PersonFacts } from '@/lib/person-avatar';
 import { guessLanguage } from '@/lib/person-language.server';
+import { resolveStudyStage } from '@/lib/person-study';
 
 const MAX_IDS = 500;
 const MAX_PLACES = 200;
@@ -40,6 +45,15 @@ interface PlaceInput {
 
 function str(v: unknown, max = 120): string | null {
   return typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+}
+
+const USER_COLUMNS = 'id, name, avatar_url, user_type, preferred_language, home_language, limited_english';
+/** Added by 20261226100000_users_study_stage.sql. */
+const STUDY_COLUMNS = 'study_stage, twelfth_passed_year';
+
+/** Postgres "undefined column": the study columns are not on this database yet. */
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  return !!error && (error.code === '42703' || /does not exist/i.test(error.message ?? ''));
 }
 
 function chunks<T>(list: T[], size: number): T[][] {
@@ -77,11 +91,9 @@ export async function POST(request: Request) {
     for (const part of chunks(ids, CHUNK)) {
       // users holds everyone (staff and parents too) plus the language columns;
       // the lifecycle view adds the funnel facts, but only for leads and students.
-      const [usersRes, lifecycleRes, followUpsRes] = await Promise.all([
-        supabase
-          .from('users')
-          .select('id, name, avatar_url, user_type, preferred_language, home_language, limited_english')
-          .in('id', part),
+      const readUsers = (columns: string) => supabase.from('users').select(columns).in('id', part);
+      const [firstUsersRes, lifecycleRes, followUpsRes, leadsRes, demosRes] = await Promise.all([
+        readUsers(`${USER_COLUMNS}, ${STUDY_COLUMNS}`),
         supabase
           .from('user_lifecycle_view')
           .select(
@@ -96,7 +108,21 @@ export async function POST(request: Request) {
           .in('status', OPEN_FOLLOW_UP)
           .not('interest_level', 'is', null)
           .order('created_at', { ascending: false }),
+        // A person can have more than one application; the newest one speaks for them.
+        supabase
+          .from('lead_profiles')
+          .select('user_id, academic_data, applicant_category, updated_at')
+          .in('user_id', part)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('demo_class_registrations')
+          .select('user_id, current_class, created_at')
+          .in('user_id', part)
+          .not('current_class', 'is', null)
+          .order('created_at', { ascending: false }),
       ]);
+      // Before the migration lands, read users as before rather than fail every avatar.
+      const usersRes = isMissingColumn(firstUsersRes.error) ? await readUsers(USER_COLUMNS) : firstUsersRes;
       if (usersRes.error) throw usersRes.error;
       if (lifecycleRes.error) throw lifecycleRes.error;
       // Heat is a nice-to-have: a failed read leaves it blank rather than failing the screen.
@@ -104,10 +130,28 @@ export async function POST(request: Request) {
       for (const f of followUpsRes.error ? [] : followUpsRes.data ?? []) {
         if (f.user_id && !interest.has(f.user_id)) interest.set(f.user_id, f.interest_level);
       }
+      // The class is a nice-to-have too: a failed read only drops that source.
+      const application = new Map<string, any>();
+      for (const lp of leadsRes.error ? [] : leadsRes.data ?? []) {
+        if (lp.user_id && !application.has(lp.user_id)) application.set(lp.user_id, lp);
+      }
+      const demoClass = new Map<string, string>();
+      for (const d of demosRes.error ? [] : demosRes.data ?? []) {
+        if (d.user_id && !demoClass.has(d.user_id)) demoClass.set(d.user_id, d.current_class);
+      }
 
       const lifecycle = new Map<string, any>((lifecycleRes.data ?? []).map((r: any) => [r.id, r]));
       for (const u of usersRes.data ?? []) {
         const l = lifecycle.get(u.id) ?? {};
+        const lp = application.get(u.id);
+        const study = resolveStudyStage({
+          enrolment: l.current_standard,
+          staff: u.study_stage,
+          application: lp ? mapClassToStandard(lp.academic_data ?? null, lp.applicant_category ?? null) : null,
+          demo: demoClass.get(u.id),
+          staffTwelfthYear: u.twelfth_passed_year,
+          applicationTwelfthYear: lp?.academic_data?.twelfth_year,
+        });
         people[u.id] = {
           name: u.name ?? null,
           avatarUrl: u.avatar_url ?? null,
@@ -126,7 +170,9 @@ export async function POST(request: Request) {
             city: l.city,
           }),
           examYear: l.exam_year ?? null,
-          currentStandard: l.current_standard ?? null,
+          currentStandard: study.stage,
+          studySource: study.source,
+          twelfthPassedYear: study.twelfthPassedYear,
           city: l.city ?? null,
           state: l.state ?? null,
           classroomName: l.nexus_classroom_name ?? null,

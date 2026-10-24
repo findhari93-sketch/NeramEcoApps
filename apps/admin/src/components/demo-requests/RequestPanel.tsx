@@ -53,6 +53,8 @@ import { formatRupees, formatDueDate } from '@neram/database/fee-plan';
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
+import FollowUpHistory from './FollowUpHistory';
+import { awaitingReply } from '@neram/database/demo-follow-up';
 import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import EnrolmentLinkStatus, { linkMoneyLine } from './EnrolmentLinkStatus';
 import FinaliseEnrolmentDialog from './FinaliseEnrolmentDialog';
@@ -69,12 +71,13 @@ import { closedReason, linkIsReallyPaid, linkIsUnfinalisedRecorded } from './jou
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import TeamsEvidence from './TeamsEvidence';
 import TryLaterDialog from './TryLaterDialog';
-import { formatLaterDate, laterEmailRecipient, laterFamilyMessage } from '@/lib/demo/try-later';
+import { formatLaterDate, isParkedAfterDemo, laterEmailRecipient, laterFamilyMessage, parkedReason } from '@/lib/demo/try-later';
 import { marketingOriginFor } from '@/lib/marketing-links';
 import { guestsWhoJoined, hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import DemoPersonAvatar from './DemoPersonAvatar';
 import LanguageChip from '@/components/person/LanguageChip';
+import StudiesChip from '@/components/person/StudiesChip';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
 
 /** Page codes the demo booking stores for its entry points (marketing DemoBookingCard). */
@@ -426,6 +429,7 @@ export default function RequestPanel({
             )}
             {/* Language belongs to the student, so only on their own account. */}
             {r.user_id && !parentAccount && <LanguageChip userId={r.user_id} />}
+            {r.user_id && !parentAccount && <StudiesChip userId={r.user_id} />}
             <Typography variant="body2" color="text.secondary">
               {r.ref_code} · requested {ago(r.created_at, now)}
             </Typography>
@@ -859,6 +863,7 @@ export default function RequestPanel({
               <Button variant={followUpStopped ? 'outlined' : 'contained'} onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
                 {followUpStopped ? 'Restart follow-up' : 'Start follow-up'}
               </Button>
+              <FollowUpHistory attempts={detail.followUpAttempts ?? []} />
             </>
           )}
           {['rejected', 'cancelled', 'no_show'].includes(r.status) && (
@@ -881,23 +886,43 @@ export default function RequestPanel({
               />
             )}
             <Typography variant="body2">
-              Next follow-up{' '}
+              {awaitingReply(detail.followUp) ? 'Check for a reply' : 'Next follow-up'}{' '}
               {detail.followUp.scheduled_callback_at ? formatDemoDateTime(new Date(detail.followUp.scheduled_callback_at)) : 'not set'}
             </Typography>
           </Box>
+          {awaitingReply(detail.followUp) && detail.followUp.last_attempt_at && (
+            <Typography variant="body2" color="success.dark" fontWeight={600} sx={{ mt: 0.5 }}>
+              WhatsApp sent {formatDemoDateTime(new Date(detail.followUp.last_attempt_at))}. Waiting for a reply.
+            </Typography>
+          )}
           {detail.followUp.notes && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {detail.followUp.notes}
             </Typography>
           )}
+          {isParkedAfterDemo(detail.followUp, now) && (
+            <Alert severity="info" icon={<SnoozeIcon />} sx={{ mt: 1 }}>
+              <Typography variant="body2" fontWeight={700}>
+                Asked us to wait. Back in After demo on {formatLaterDate(detail.followUp.scheduled_callback_at!)}.
+              </Typography>
+              {parkedReason(detail.followUp) && <Typography variant="body2">{parkedReason(detail.followUp)}</Typography>}
+              <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+                You get the follow-up reminder that day. Log outcome brings them back now.
+              </Typography>
+            </Alert>
+          )}
           <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
             <Button variant="outlined" onClick={() => setLogOpen(true)} sx={{ minHeight: 44 }}>
               Log outcome
+            </Button>
+            <Button startIcon={<SnoozeIcon />} onClick={() => setLaterOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+              {isParkedAfterDemo(detail.followUp, now) ? 'Change date' : 'Try later'}
             </Button>
             <Button color="error" onClick={() => setStopOpen(true)} sx={{ minHeight: 44 }}>
               Stop follow-up
             </Button>
           </Box>
+          <FollowUpHistory attempts={detail.followUpAttempts ?? []} />
           {r.user_id && (
             <Box sx={{ mt: 1 }}>
               <EnrolmentLinkStatus
@@ -927,10 +952,18 @@ export default function RequestPanel({
             name={r.name}
             callbackId={detail.followUp.id}
             interest={detail.followUp.interest_level}
+            awaiting={
+              awaitingReply(detail.followUp)
+                ? {
+                    at: detail.followUp.last_attempt_at || detail.followUp.scheduled_callback_at || new Date().toISOString(),
+                    message: detail.followUpAttempts?.find((a) => a.outcome === 'message_sent')?.message_sent ?? null,
+                  }
+                : null
+            }
             onClose={() => setLogOpen(false)}
-            onSaved={async () => {
+            onSaved={async (summary) => {
               setLogOpen(false);
-              await onAction({ action: 'note', note: 'Follow-up call logged' });
+              await onAction({ action: 'note', note: summary });
             }}
           />
           <LogOutcomeDialog
@@ -1309,6 +1342,7 @@ export default function RequestPanel({
         open={laterOpen}
         name={r.name}
         confirmed={r.status === 'approved'}
+        afterDemo={r.status === 'attended' || r.status === 'no_show'}
         hasEmail={!!laterEmail}
         now={now}
         busy={busy === 'try_later'}

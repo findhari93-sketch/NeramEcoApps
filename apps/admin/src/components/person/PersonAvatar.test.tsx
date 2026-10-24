@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import PersonAvatar from './PersonAvatar';
 
 function ring(container: HTMLElement): string | null {
@@ -102,5 +102,56 @@ describe('PersonAvatar', () => {
     render(<PersonAvatar name="Small" size={24} facts={{ userType: 'lead', examYear: 2027, interest: 'hot' }} />);
     expect(screen.queryByTestId('person-exam-mark')).toBeNull();
     expect(screen.queryByTestId('person-hot-mark')).toBeNull();
+  });
+
+  it('fills the exam pill orange for a break year, and keeps Class 12 plain', () => {
+    render(<PersonAvatar name="Divya" facts={{ userType: 'lead', examYear: 2027, currentStandard: 'gap_year', twelfthPassedYear: 2025 }} />);
+    const pill = screen.getByTestId('person-exam-mark');
+    expect(pill.textContent).toBe('27');
+    expect(pill.getAttribute('data-break-year')).toBe('true');
+    expect(
+      screen.getByRole('img', { name: 'Divya. Lead. Break year: finished Class 12 in 2025, 2027 exam.' }),
+    ).toBeTruthy();
+  });
+
+  it('keeps a Class 12 pill plain', () => {
+    render(<PersonAvatar name="Arun" facts={{ userType: 'lead', examYear: 2027, currentStandard: '12th' }} />);
+    expect(screen.getByTestId('person-exam-mark').getAttribute('data-break-year')).toBeNull();
+  });
+
+  it('shows a break year even when no exam year is known', () => {
+    render(<PersonAvatar name="Ravi" facts={{ userType: 'lead', currentStandard: 'gap_year' }} />);
+    const pill = screen.getByTestId('person-exam-mark');
+    expect(pill.getAttribute('data-break-year')).toBe('true');
+    expect(pill.querySelector('svg')).toBeTruthy();
+  });
+
+  it('opens the quick editor on click, and the row underneath does not open', () => {
+    const rowClick = vi.fn();
+    render(
+      <div onClick={rowClick}>
+        <PersonAvatar userId="u1" name="Divya" facts={{ userType: 'lead', currentStandard: 'gap_year' }} />
+      </div>,
+    );
+    const avatar = screen.getByRole('button', { name: /^Divya\. Lead\..*Set class or language\.$/ });
+    fireEvent.click(avatar);
+    expect(rowClick).not.toHaveBeenCalled();
+    const editor = screen.getByTestId('person-quick-editor');
+    expect(editor.getAttribute('aria-label')).toBe('Edit Divya');
+    expect(screen.getByRole('button', { name: 'Break year' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Finished Class 12 in')).toBeTruthy();
+  });
+
+  it('opens from the keyboard too', () => {
+    render(<PersonAvatar userId="u1" name="Divya" facts={{ userType: 'lead' }} />);
+    fireEvent.keyDown(screen.getByRole('button', { name: /Set class or language/ }), { key: 'Enter' });
+    expect(screen.getByTestId('person-quick-editor')).toBeTruthy();
+  });
+
+  it('offers no editor for staff, people with no account, or a photo that opens on tap', () => {
+    render(<PersonAvatar userId="s1" name="Hari" ring="staff" />);
+    render(<PersonAvatar name="Walk-in" facts={{ userType: 'lead' }} />);
+    render(<PersonAvatar userId="u2" name="Asha" facts={{ userType: 'lead' }} tapToView />);
+    expect(screen.queryByRole('button', { name: /Set class or language/ })).toBeNull();
   });
 });

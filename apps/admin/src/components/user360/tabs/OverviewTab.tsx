@@ -18,6 +18,7 @@ import { EmptyNote, KeyValue, SectionCard, TwoColumns, type User360TabProps } fr
 import IdentityList from '../IdentityList';
 import PhoneNumberList from '../PhoneNumberList';
 import FamilyCard from '../FamilyCard';
+import { STANDARD_LABEL } from '@/lib/person-avatar';
 
 const FIRST_TOUCH_LABELS: Record<string, string> = {
   utm_source: 'Source',
@@ -59,7 +60,7 @@ export default function OverviewTab({ data, detail, onNavigateTab }: User360TabP
                 }
               />
               <KeyValue label="Target year" value={p.target_year} />
-              <KeyValue label="Class" value={p.current_standard ? `Class ${p.current_standard}` : null} />
+              <KeyValue label="Class" value={p.current_standard ? STANDARD_LABEL[p.current_standard] ?? p.current_standard : null} />
               <KeyValue label="Academic year" value={p.academic_year} />
               <KeyValue label="City" value={p.city} />
             </Box>

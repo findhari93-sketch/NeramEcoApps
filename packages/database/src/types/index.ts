@@ -193,6 +193,16 @@ export interface User extends Timestamps {
   home_language: string | null;
   /** Staff recorded in Nexus: they cannot follow a class taught in English. */
   limited_english: boolean;
+  /**
+   * Staff recorded in Admin (migration 20261226100000): same values as
+   * nexus_enrollments.current_standard; 'gap_year' is a break year. An active
+   * enrolment's value wins for students. Optional until that migration lands.
+   */
+  study_stage?: NexusStudyStage | null;
+  study_stage_set_at?: string | null;
+  study_stage_set_by?: string | null;
+  /** The year a break-year student finished Class 12. */
+  twelfth_passed_year?: number | null;
   metadata: Record<string, unknown> | null;
 
   // Lifecycle focus (reversible archive) + academic-year cohort + exam status

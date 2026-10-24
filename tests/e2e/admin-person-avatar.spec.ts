@@ -5,7 +5,8 @@ import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 /**
  * Admin > PersonAvatar: the ring (gold student, dashed gold paused, silver
  * alumni, slate lead, blue staff, dotted slate for everyone else) and the
- * language letter on every person.
+ * language letter on every person, the orange break-year pill, and the quick
+ * editor a click on any student or lead's avatar opens.
  *
  * UI tests read real staging rows (the ring vocabulary is what is checked, not
  * particular people) and skip when the runner has no Microsoft session, as the
@@ -51,6 +52,35 @@ test.describe('PersonAvatar @admin', () => {
       const res = await request.patch(`${ADMIN}/api/crm/users/${SOME_UUID}/language`, { data: { homeLanguage } });
       expect(res.status()).toBe(400);
     }
+  });
+
+  test('API: the studies route refuses a bad class or a year that does not fit', async ({ request }) => {
+    const url = `${ADMIN}/api/crm/users/${SOME_UUID}/studies`;
+    for (const data of [
+      { studyStage: '9th' },
+      { studyStage: 'Break year' },
+      {},
+      { studyStage: '12th', twelfthPassedYear: 2025 },
+      { studyStage: 'gap_year', twelfthPassedYear: new Date().getFullYear() + 1 },
+    ]) {
+      expect((await request.patch(url, { data })).status()).toBe(400);
+    }
+  });
+
+  test('CRM: a click on an avatar opens the quick editor, not the person', async ({ page }) => {
+    await open(page, '/crm', /People/);
+    const editable = page.getByRole('button', { name: /Set class or language\.$/ }).first();
+    await expect(editable).toBeVisible({ timeout: 30_000 });
+    const before = page.url();
+    await editable.click();
+    const editor = page.getByTestId('person-quick-editor');
+    await expect(editor).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Break year' })).toBeVisible();
+    await expect(editor.getByRole('group', { name: 'Language' })).toBeVisible();
+    // Opening the editor is not a navigation: the row did not open.
+    expect(page.url()).toBe(before);
+    await page.keyboard.press('Escape');
+    await expect(editor).toBeHidden();
   });
 
   test('CRM: every person wears a ring from the vocabulary, and the key explains it', async ({ page }) => {

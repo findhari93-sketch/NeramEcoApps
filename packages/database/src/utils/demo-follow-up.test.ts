@@ -7,6 +7,8 @@ import {
   decideEnrolUser,
   buildOwnerDigest,
   buildManagerSummary,
+  LATER_FLAG,
+  awaitingReply,
   type DigestRow,
 } from './demo-follow-up';
 
@@ -27,7 +29,7 @@ describe('applyFollowUpOutcome', () => {
   it('thinking needs a next date and stays scheduled', () => {
     expect(applyFollowUpOutcome({ outcome: 'thinking', now: NOW, recent: [] })).toEqual({ error: 'Pick the next follow-up date.' });
     const r = applyFollowUpOutcome({ outcome: 'thinking', nextAt: next, now: NOW, recent: [] });
-    expect(r).toMatchObject({ status: 'scheduled', scheduledAt: next, attemptOutcome: 'thinking', removeFlags: ['hard_to_reach'] });
+    expect(r).toMatchObject({ status: 'scheduled', scheduledAt: next, attemptOutcome: 'thinking', removeFlags: ['hard_to_reach', 'later'] });
   });
   it('will join uses the join date', () => {
     expect(applyFollowUpOutcome({ outcome: 'will_join', nextAt: next, now: NOW, recent: [] })).toMatchObject({ status: 'scheduled', scheduledAt: next });
@@ -45,7 +47,37 @@ describe('applyFollowUpOutcome', () => {
     expect(applyFollowUpOutcome({ outcome: 'not_interested', reason: 'Fees', now: NOW, recent: [] })).toMatchObject({ status: 'completed', scheduledAt: null, attemptOutcome: 'not_interested' });
   });
   it('joined closes', () => {
-    expect(applyFollowUpOutcome({ outcome: 'joined', now: NOW, recent: [] })).toMatchObject({ status: 'completed', attemptOutcome: 'joined', removeFlags: ['hard_to_reach', 'payment_pending'] });
+    expect(applyFollowUpOutcome({ outcome: 'joined', now: NOW, recent: [] })).toMatchObject({ status: 'completed', attemptOutcome: 'joined', removeFlags: ['hard_to_reach', 'payment_pending', 'later'] });
+  });
+  it('any logged call un-parks a Try later follow-up', () => {
+    const results = [
+      applyFollowUpOutcome({ outcome: 'thinking', nextAt: next, now: NOW, recent: [] }),
+      applyFollowUpOutcome({ outcome: 'will_join', nextAt: next, now: NOW, recent: [] }),
+      applyFollowUpOutcome({ outcome: 'no_answer', now: NOW, recent: [] }),
+      applyFollowUpOutcome({ outcome: 'not_interested', reason: 'Fees', now: NOW, recent: [] }),
+      applyFollowUpOutcome({ outcome: 'joined', now: NOW, recent: [] }),
+    ];
+    for (const r of results) expect('removeFlags' in r && r.removeFlags).toContain(LATER_FLAG);
+  });
+  it('a message sent waits for a reply on the chosen date, without touching hard to reach', () => {
+    expect(applyFollowUpOutcome({ outcome: 'message_sent', now: NOW, recent: [] })).toEqual({ error: 'Pick the next follow-up date.' });
+    expect(applyFollowUpOutcome({ outcome: 'message_sent', nextAt: next, now: NOW, recent: [] })).toEqual({
+      status: 'scheduled',
+      scheduledAt: next,
+      attemptOutcome: 'message_sent',
+      addFlags: [],
+      removeFlags: [LATER_FLAG],
+    });
+  });
+  it('no reply after each message still counts toward hard to reach', () => {
+    const r = applyFollowUpOutcome({ outcome: 'no_answer', now: NOW, recent: ['message_sent', 'not_picked_up', 'message_sent', 'not_picked_up'] });
+    expect(r).toMatchObject({ addFlags: ['hard_to_reach'] });
+  });
+  it('awaitingReply: an open follow-up whose last attempt was a message', () => {
+    expect(awaitingReply({ status: 'scheduled', call_outcome: 'message_sent' })).toBe(true);
+    expect(awaitingReply({ status: 'scheduled', call_outcome: 'thinking' })).toBe(false);
+    expect(awaitingReply({ status: 'completed', call_outcome: 'message_sent' })).toBe(false);
+    expect(awaitingReply(null)).toBe(false);
   });
   it('rejects a next date in the past', () => {
     expect(applyFollowUpOutcome({ outcome: 'thinking', nextAt: '2026-10-14T05:00:00.000Z', now: NOW, recent: [] })).toEqual({ error: 'The next follow-up must be in the future.' });

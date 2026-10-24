@@ -11,6 +11,7 @@ import {
   activityLine,
   examYearMark,
   glanceSentences,
+  isBreakYear,
   placeLine,
   studyLine,
 } from './person-avatar';
@@ -126,6 +127,12 @@ describe('factsFromJourney', () => {
     expect(facts.isAlumni).toBeUndefined();
     expect(facts.examYear).toBeUndefined();
   });
+
+  it('leaves the class to the provider, even when the row says null', () => {
+    // The row only knows the Nexus enrolment; a lead's break year comes from their application.
+    const facts = factsFromJourney({ user_type: 'lead', current_standard: null } as never);
+    expect('currentStandard' in facts).toBe(false);
+  });
 });
 
 describe('ringForExamYear', () => {
@@ -163,6 +170,25 @@ describe('the glance', () => {
     expect(studyLine({ examYear: 2028 })).toBe('2028 exam');
     expect(studyLine({ currentStandard: 'gap_year' })).toBe('Break year');
     expect(studyLine({})).toBeNull();
+  });
+
+  it('says when a break-year student finished Class 12', () => {
+    expect(studyLine({ currentStandard: 'gap_year', twelfthPassedYear: 2025, examYear: 2027 })).toBe(
+      'Break year: finished Class 12 in 2025, 2027 exam',
+    );
+    expect(isBreakYear({ currentStandard: 'gap_year' })).toBe(true);
+    expect(isBreakYear({ currentStandard: '12th' })).toBe(false);
+  });
+
+  it("flags a class the student gave on a form rather than one staff or Nexus confirmed", () => {
+    expect(studyLine({ currentStandard: 'gap_year', studySource: 'application' })).toBe(
+      'Break year (from their application)',
+    );
+    expect(studyLine({ currentStandard: '12th', examYear: 2027, studySource: 'demo' })).toBe(
+      'Class 12, 2027 exam (from the demo booking)',
+    );
+    expect(studyLine({ currentStandard: '12th', studySource: 'staff' })).toBe('Class 12');
+    expect(studyLine({ examYear: 2027, studySource: 'demo' })).toBe('2027 exam');
   });
 
   it('does not repeat a city that shares its state name', () => {

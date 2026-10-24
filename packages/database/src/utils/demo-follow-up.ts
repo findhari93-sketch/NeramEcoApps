@@ -5,10 +5,14 @@
 import { istDateKey, istDateTime } from './demo-schedule';
 
 export type InterestLevel = 'hot' | 'warm' | 'cold';
-export type FollowUpOutcome = 'thinking' | 'will_join' | 'no_answer' | 'not_interested' | 'joined';
+export type FollowUpOutcome = 'thinking' | 'will_join' | 'no_answer' | 'not_interested' | 'joined' | 'message_sent';
 export type DemoFollowUpKind = 'post_demo' | 'demo_rebook';
 /** callback_outcome enum values written to callback_attempts. */
-export type AttemptOutcome = 'thinking' | 'will_join' | 'not_picked_up' | 'not_interested' | 'joined';
+export type AttemptOutcome = 'thinking' | 'will_join' | 'not_picked_up' | 'not_interested' | 'joined' | 'message_sent';
+/** How staff reached the family on an attempt (callback_attempts.channel). */
+export type FollowUpChannel = 'call' | 'whatsapp';
+/** What a follow-up message was about (callback_attempts.topic). */
+export type FollowUpTopic = 'fees' | 'timing' | 'parents' | 'family' | 'preparation' | 'checking_in';
 
 export const DEMO_FOLLOW_UP_KINDS: DemoFollowUpKind[] = ['post_demo', 'demo_rebook'];
 export const INTEREST_LABELS: Record<InterestLevel, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' };
@@ -18,10 +22,31 @@ export const FOLLOW_UP_OUTCOME_LABELS: Record<FollowUpOutcome, string> = {
   no_answer: 'No answer',
   not_interested: 'Not interested',
   joined: 'Joined',
+  message_sent: 'Sent a message',
 };
+export const FOLLOW_UP_TOPIC_LABELS: Record<FollowUpTopic, string> = {
+  fees: 'Fees',
+  timing: 'Timing',
+  parents: 'Parents',
+  family: 'Family situation',
+  preparation: 'Preparation',
+  checking_in: 'Just checking in',
+};
+export const FOLLOW_UP_TOPICS = Object.keys(FOLLOW_UP_TOPIC_LABELS) as FollowUpTopic[];
+export const isFollowUpTopic = (v: unknown): v is FollowUpTopic => typeof v === 'string' && v in FOLLOW_UP_TOPIC_LABELS;
+
+/** The last attempt on this open follow-up was a WhatsApp message: we are waiting for a reply. */
+export function awaitingReply(f: { status: string; call_outcome: string | null } | null | undefined): boolean {
+  return !!f && ['pending', 'scheduled', 'attempted'].includes(f.status) && f.call_outcome === 'message_sent';
+}
 export const NO_ANSWER_RETRY_DAYS = 2;
 export const HARD_TO_REACH_AFTER = 3;
 export const JOINED_PAYMENT_GRACE_DAYS = 14;
+/**
+ * Flag on an open follow-up parked by "Try later" after the demo: it sits on
+ * the desk's Later tab until scheduled_callback_at. Any logged call clears it.
+ */
+export const LATER_FLAG = 'later';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -61,15 +86,19 @@ export type OutcomeResult =
 export function applyFollowUpOutcome(input: OutcomeInput): OutcomeResult {
   const { outcome, now } = input;
   const next = input.nextAt ? new Date(input.nextAt) : null;
-  const needsDate = outcome === 'thinking' || outcome === 'will_join';
+  const needsDate = outcome === 'thinking' || outcome === 'will_join' || outcome === 'message_sent';
   if (needsDate) {
     if (!next || Number.isNaN(next.getTime())) return { error: 'Pick the next follow-up date.' };
     if (next.getTime() <= now.getTime()) return { error: 'The next follow-up must be in the future.' };
-    return { status: 'scheduled', scheduledAt: next.toISOString(), attemptOutcome: outcome, addFlags: [], removeFlags: ['hard_to_reach'] };
+    // A message sent is not an answer: it neither clears nor adds to "hard to reach".
+    const removeFlags = outcome === 'message_sent' ? [LATER_FLAG] : ['hard_to_reach', LATER_FLAG];
+    return { status: 'scheduled', scheduledAt: next.toISOString(), attemptOutcome: outcome, addFlags: [], removeFlags };
   }
   if (outcome === 'no_answer') {
     let streak = 1;
     for (const o of input.recent) {
+      // A message we sent sits between misses ("sent, no reply, sent, no reply") without breaking the streak.
+      if (o === 'message_sent') continue;
       if (o !== 'not_picked_up') break;
       streak++;
     }
@@ -78,14 +107,14 @@ export function applyFollowUpOutcome(input: OutcomeInput): OutcomeResult {
       scheduledAt: new Date(now.getTime() + NO_ANSWER_RETRY_DAYS * DAY).toISOString(),
       attemptOutcome: 'not_picked_up',
       addFlags: streak >= HARD_TO_REACH_AFTER ? ['hard_to_reach'] : [],
-      removeFlags: [],
+      removeFlags: [LATER_FLAG],
     };
   }
   if (outcome === 'not_interested') {
     if (!input.reason?.trim()) return { error: 'Add the reason so the team knows why.' };
-    return { status: 'completed', scheduledAt: null, attemptOutcome: 'not_interested', addFlags: [], removeFlags: [] };
+    return { status: 'completed', scheduledAt: null, attemptOutcome: 'not_interested', addFlags: [], removeFlags: [LATER_FLAG] };
   }
-  return { status: 'completed', scheduledAt: null, attemptOutcome: 'joined', addFlags: [], removeFlags: ['hard_to_reach', 'payment_pending'] };
+  return { status: 'completed', scheduledAt: null, attemptOutcome: 'joined', addFlags: [], removeFlags: ['hard_to_reach', 'payment_pending', LATER_FLAG] };
 }
 
 export interface OwnerInput {

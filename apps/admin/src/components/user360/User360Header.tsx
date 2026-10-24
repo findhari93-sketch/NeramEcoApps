@@ -19,6 +19,7 @@ import SupervisorAccountOutlinedIcon from '@mui/icons-material/SupervisorAccount
 import CopyablePhone from '@/components/CopyablePhone';
 import PersonAvatar from '@/components/person/PersonAvatar';
 import LanguageChip from '@/components/person/LanguageChip';
+import StudiesChip from '@/components/person/StudiesChip';
 import { factsFromJourney } from '@/lib/person-avatar';
 import {
   LIFECYCLE_STAGE_LABELS,
@@ -111,6 +112,7 @@ export default function User360Header({
             )}
             {isDeactivated && <StatusChip icon={<BlockIcon />} label="Deactivated" tone="error" />}
             {p.id && <LanguageChip userId={String(p.id)} />}
+            {p.id && <StudiesChip userId={String(p.id)} />}
             {engagement && EngIcon && (
               <StatusChip icon={<EngIcon />} label={ENGAGEMENT_LABELS[engagement]} tone={ENGAGEMENT_TONES[engagement]} />
             )}

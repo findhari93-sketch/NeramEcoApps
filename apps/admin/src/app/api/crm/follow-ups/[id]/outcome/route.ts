@@ -1,12 +1,15 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, logDemoFollowUpOutcome, type FollowUpOutcome, type InterestLevel } from '@neram/database';
+import { getSupabaseAdminClient, isFollowUpTopic, logDemoFollowUpOutcome, type FollowUpOutcome, type InterestLevel } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 
-const OUTCOMES: FollowUpOutcome[] = ['thinking', 'will_join', 'no_answer', 'not_interested', 'joined'];
+const OUTCOMES: FollowUpOutcome[] = ['thinking', 'will_join', 'no_answer', 'not_interested', 'joined', 'message_sent'];
 
-/** POST /api/crm/follow-ups/[id]/outcome: log one call on a follow-up. Staff only (middleware). */
+/**
+ * POST /api/crm/follow-ups/[id]/outcome: log one call or WhatsApp message on a
+ * follow-up, with what we sent and what they replied. Staff only (middleware).
+ */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const adminId = getRequestAdminId(req);
   if (!adminId) return NextResponse.json({ error: 'Sign in again.' }, { status: 401 });
@@ -31,6 +34,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         note: str(body.note, 1000) || null,
         reason: str(body.reason, 300) || null,
         interest,
+        channel: body.channel === 'whatsapp' ? 'whatsapp' : 'call',
+        topic: isFollowUpTopic(body.topic) ? body.topic : null,
+        messageSent: str(body.messageSent, 2000) || null,
+        reply: str(body.reply, 2000) || null,
         admin: { id: adminId, name: me?.name || 'Staff' },
       },
       supabase,

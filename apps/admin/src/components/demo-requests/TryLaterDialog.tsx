@@ -25,6 +25,7 @@ export default function TryLaterDialog({
   open,
   name,
   confirmed,
+  afterDemo = false,
   hasEmail,
   now,
   busy,
@@ -36,6 +37,8 @@ export default function TryLaterDialog({
   name: string;
   /** The demo had a confirmed time (its meeting is cancelled). */
   confirmed: boolean;
+  /** The demo is over: the follow-up is parked, no family email goes out. */
+  afterDemo?: boolean;
   /** We have an email for the family, so they get one on the date. */
   hasEmail: boolean;
   now: Date;
@@ -68,9 +71,15 @@ export default function TryLaterDialog({
       <DialogTitle id="try-later-title">Try again later with {first}?</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {confirmed ? 'The Teams meeting is cancelled and their reminders stop. ' : ''}
-          It moves to the Later tab. On the date you pick you get a Neram Assistant reminder to call, and it comes back to To call.
-          {hasEmail ? ' The family also gets one email asking if it is a better time.' : ' There is no email on file, so send them the message on WhatsApp from here on that day.'}
+          {afterDemo ? (
+            'The follow-up pauses and they move to the Later tab. On the date you pick you get the follow-up reminder, and they come back to After demo.'
+          ) : (
+            <>
+              {confirmed ? 'The Teams meeting is cancelled and their reminders stop. ' : ''}
+              It moves to the Later tab. On the date you pick you get a Neram Assistant reminder to call, and it comes back to To call.
+              {hasEmail ? ' The family also gets one email asking if it is a better time.' : ' There is no email on file, so send them the message on WhatsApp from here on that day.'}
+            </>
+          )}
         </Typography>
 
         <Typography id="try-later-when" variant="subtitle2" component="p" sx={{ mb: 1 }}>
@@ -113,7 +122,7 @@ export default function TryLaterDialog({
           label="Why are they waiting?"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Parent will call when the daughter is free"
+          placeholder={afterDemo ? 'Mother asked us to call after the school exams' : 'Parent will call when the daughter is free'}
           required
           fullWidth
           multiline

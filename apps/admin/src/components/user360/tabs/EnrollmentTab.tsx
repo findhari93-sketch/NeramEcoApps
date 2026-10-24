@@ -14,6 +14,7 @@ import DocumentsSection from '@/components/crm/DocumentsSection';
 import EnrolmentLinksCard from '@/components/direct-enrollment/EnrolmentLinksCard';
 import { formatDate, nexusAccessText, relativeTime, sentenceCase } from '@/lib/user360-view';
 import { EmptyNote, KeyValue, SectionCard, StatusChip, TwoColumns, type User360TabProps } from '../shared';
+import { STANDARD_LABEL } from '@/lib/person-avatar';
 
 const ACCESS_ICONS = {
   enrolled: CheckCircleOutlineIcon,
@@ -93,7 +94,7 @@ export default function EnrollmentTab({ userId, data, detail, adminId, onRefresh
                       {[
                         e.classroom?.academic_year && `Year ${e.classroom.academic_year}`,
                         e.role && sentenceCase(String(e.role)),
-                        e.current_standard && `Class ${e.current_standard}`,
+                        e.current_standard && (STANDARD_LABEL[e.current_standard] ?? e.current_standard),
                         e.participation_status &&
                           (e.participation_status === 'dormant'
                             ? e.dormant_source === 'staff'

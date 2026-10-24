@@ -34,6 +34,7 @@ import {
   type LanguageKey,
 } from '@neram/ui/language';
 import type { AvatarRingVariant } from '@neram/ui';
+import type { StudySource } from './person-study';
 
 // ── The facts ───────────────────────────────────────────────────────────────
 
@@ -66,8 +67,16 @@ export interface PersonFacts {
   // ── The glance details: corners and the hover card ──
   /** The exam they are preparing for (user_lifecycle_view.exam_year). Top-right "27". */
   examYear: number | null;
-  /** nexus_enrollments.current_standard: '12th', '11th', '10th', 'gap_year'. Hover card only. */
+  /**
+   * '10th' | '11th' | '12th' | 'gap_year', resolved on the server from Nexus,
+   * staff, the application and the demo booking (person-study.ts). A break year
+   * ('gap_year') fills the exam pill orange.
+   */
   currentStandard: string | null;
+  /** Where currentStandard came from: the hover card flags a student's own word. */
+  studySource: StudySource | null;
+  /** The year a break-year student finished Class 12. */
+  twelfthPassedYear: number | null;
   city: string | null;
   state: string | null;
   /** Their Nexus classroom, for a student. */
@@ -248,7 +257,6 @@ export function factsFromJourney(row: {
   student_profile_id?: string | null;
   linked_classroom_email?: string | null;
   exam_year?: number | null;
-  current_standard?: string | null;
   city?: string | null;
   state?: string | null;
   nexus_classroom_name?: string | null;
@@ -257,6 +265,8 @@ export function factsFromJourney(row: {
 }): Partial<PersonFacts> {
   // A column this row does not carry stays undefined, so the looked-up value
   // shows instead of being overwritten with a null that only means "not selected".
+  // current_standard is left to the provider on purpose: the row only knows the
+  // Nexus enrolment's, and its null would hide a break year from the application.
   const has = (key: keyof typeof row) => Object.prototype.hasOwnProperty.call(row, key);
   const opt = <T,>(key: keyof typeof row, value: T) => (has(key) ? value : undefined);
   return {
@@ -268,7 +278,6 @@ export function factsFromJourney(row: {
     studentProfileId: opt('student_profile_id', row.student_profile_id ?? null),
     linkedClassroomEmail: opt('linked_classroom_email', row.linked_classroom_email ?? null),
     examYear: opt('exam_year', row.exam_year ?? null),
-    currentStandard: opt('current_standard', row.current_standard ?? null),
     city: opt('city', row.city ?? null),
     state: opt('state', row.state ?? null),
     classroomName: opt('nexus_classroom_name', row.nexus_classroom_name ?? null),
@@ -307,11 +316,34 @@ export const STANDARD_LABEL: Record<string, string> = {
   gap_year: 'Break year',
 };
 
-/** "Class 12, 2027 exam" / "2027 exam" / null. */
+/** Nexus's break-year orange (student-stage.ts gap_year): white on it is 5.2:1. */
+export const BREAK_YEAR_COLOR = '#C2410C';
+/** A hot lead's flame. Red, so it never reads as the break-year orange: white on it is 6.5:1. */
+export const HOT_LEAD_COLOR = '#B91C1C';
+
+/** Finished Class 12 and preparing full time: the orange exam pill. */
+export function isBreakYear(facts: Partial<PersonFacts> | null | undefined): boolean {
+  return facts?.currentStandard === 'gap_year';
+}
+
+const STUDY_SOURCE_NOTE: Partial<Record<StudySource, string>> = {
+  application: 'from their application',
+  demo: 'from the demo booking',
+};
+
+/**
+ * "Class 12, 2027 exam" / "Break year: finished Class 12 in 2025, 2027 exam" /
+ * "2027 exam" / null. A stage the student gave on a form says so in brackets.
+ */
 export function studyLine(facts: Partial<PersonFacts> | null | undefined): string | null {
-  const standard = facts?.currentStandard ? STANDARD_LABEL[facts.currentStandard] : null;
   const exam = facts?.examYear ? `${facts.examYear} exam` : null;
-  return [standard, exam].filter(Boolean).join(', ') || null;
+  let standard = facts?.currentStandard ? STANDARD_LABEL[facts.currentStandard] ?? null : null;
+  if (standard && isBreakYear(facts) && facts?.twelfthPassedYear) {
+    standard = `${standard}: finished Class 12 in ${facts.twelfthPassedYear}`;
+  }
+  const note = standard && facts?.studySource ? STUDY_SOURCE_NOTE[facts.studySource] : undefined;
+  const line = [standard, exam].filter(Boolean).join(', ');
+  return line ? (note ? `${line} (${note})` : line) : null;
 }
 
 /** "Chennai, Tamil Nadu", without repeating a city that is also the state's name. */

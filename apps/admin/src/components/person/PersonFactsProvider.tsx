@@ -68,11 +68,15 @@ class PersonFactsStore {
     }
   }
 
-  /** The language editor's optimistic write. A cleared language refetches, to bring the guess back. */
-  update(id: string, patch: Partial<PersonFacts>) {
+  /**
+   * An editor's optimistic write. `refetch` asks the server again, once a save
+   * has landed: a cleared language or class brings back the guess, or what
+   * their application said, which only the server can work out.
+   */
+  update(id: string, patch: Partial<PersonFacts>, refetch = false) {
     const current = this.people.get(id);
     if (current) this.people.set(id, { ...current, ...patch });
-    if (patch.homeLanguage === null) {
+    if (refetch) {
       this.requested.delete(id);
       this.request(id, null);
     }
@@ -147,8 +151,8 @@ export function usePersonFacts(
   };
 }
 
-/** For the language editor: write through to every avatar of this person on screen. */
-export function useUpdatePersonFacts(): (id: string, patch: Partial<PersonFacts>) => void {
+/** For the editors: write through to every avatar of this person on screen. */
+export function useUpdatePersonFacts(): (id: string, patch: Partial<PersonFacts>, refetch?: boolean) => void {
   const store = useContext(PersonFactsContext);
-  return useCallback((id, patch) => store?.update(id, patch), [store]);
+  return useCallback((id, patch, refetch) => store?.update(id, patch, refetch), [store]);
 }

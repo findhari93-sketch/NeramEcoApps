@@ -21,7 +21,9 @@ import {
   thanksSendAfter,
   formatDemoDateTime,
   openDemoFollowUp,
+  parkDemoFollowUp,
   getOpenDemoFollowUp,
+  listDemoFollowUpAttempts,
   listDemoFollowUpsByDemo,
   rebookFollowUpAt,
   pickDemoRoles,
@@ -72,9 +74,10 @@ async function detail(id: string) {
     const { data } = await (supabase as any).from('users').select('id, name').in('id', actorIds);
     actors = Object.fromEntries((data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
   }
-  const [followUp, latest] = await Promise.all([
+  const [followUp, latest, followUpAttempts] = await Promise.all([
     request.user_id ? getOpenDemoFollowUp(request.user_id, supabase) : Promise.resolve(null),
     listDemoFollowUpsByDemo([id], supabase),
+    listDemoFollowUpAttempts(id, supabase),
   ]);
   // The newest follow-up of this demo even when it is closed (stopped or joined).
   const enrolmentLink = await deskEnrolmentLink(supabase, id, request.user_id);
@@ -96,6 +99,7 @@ async function detail(id: string) {
     actors,
     followUp,
     lastFollowUp: latest[id] ?? null,
+    followUpAttempts,
     enrolmentLink,
     fee,
     createdByName: request.created_by ? actors[request.created_by] ?? null : null,
@@ -640,13 +644,27 @@ export async function POST(req: Request, { params }: Params) {
 
       case 'try_later': {
         // The family asked us to wait. Park it with a date; it comes back then.
-        if (!['pending', 'contacted', 'approved'].includes(r.status)) throw new ActionError('This request is already closed.');
+        const afterDemo = r.status === 'attended' || r.status === 'no_show';
+        if (!afterDemo && !['pending', 'contacted', 'approved'].includes(r.status)) throw new ActionError('This request is already closed.');
         const reason = text(body.reason, 300);
         if (!reason || reason.length < 3) throw new ActionError('Add a short note on why they asked to wait.');
         const dateKey = typeof body.laterDate === 'string' ? body.laterDate : '';
         const dateError = laterDateError(dateKey, new Date());
         if (dateError) throw new ActionError(dateError);
         const at = laterContactAt(dateKey);
+        if (afterDemo) {
+          // After the demo the follow-up is parked, not the request: the demo stays
+          // attended and the follow-up reminder fires on the date. No family email,
+          // since that one is about booking a demo.
+          if (!actorId) throw new ActionError('Sign in again to continue.', 401);
+          const open = r.user_id ? await getOpenDemoFollowUp(r.user_id, supabase) : null;
+          if (!open) throw new ActionError('Start a follow-up first.');
+          const { data: me } = await (supabase as any).from('users').select('name').eq('id', actorId).maybeSingle();
+          const res = await parkDemoFollowUp({ callbackId: open.id, at, reason, admin: { id: actorId, name: me?.name || 'Staff' } }, supabase);
+          if (res.error) throw new ActionError(res.error);
+          await log('call', 'later', `Try later after the demo: ${formatLaterDate(at)}. ${reason}`);
+          break;
+        }
         const wasConfirmed = r.status === 'approved';
         if (wasConfirmed && r.organizer_upn && r.graph_event_id && !r.graph_event_id.startsWith('cancelled:')) {
           await cancelDemoEvent(r.organizer_upn, r.graph_event_id, `As you asked, we will check back with you around ${formatLaterDate(at)}.`);

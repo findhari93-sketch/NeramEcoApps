@@ -1171,34 +1171,31 @@ export default function UsersTable(props: UsersTableProps) {
             Export CSV
           </Button>
 
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 18 }} />}
-            onClick={() => {
-              if (onBulkArchiveRequest) {
-                onBulkArchiveRequest(selectedRows.map((r) => r.original));
-              }
-            }}
-            sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
-          >
-            Archive
-          </Button>
+          {/* Only actions the page wired up are shown, so no button silently does nothing. */}
+          {onBulkArchiveRequest && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 18 }} />}
+              onClick={() => onBulkArchiveRequest(selectedRows.map((r) => r.original))}
+              sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
+            >
+              Archive
+            </Button>
+          )}
 
-          <Button
-            variant="outlined"
-            color="error"
-            size="small"
-            startIcon={<DeleteOutlineIcon sx={{ fontSize: 18 }} />}
-            onClick={() => {
-              if (onBulkDeleteRequest) {
-                onBulkDeleteRequest(selectedRows.map((r) => r.original));
-              }
-            }}
-            sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
-          >
-            Delete
-          </Button>
+          {onBulkDeleteRequest && (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<DeleteOutlineIcon sx={{ fontSize: 18 }} />}
+              onClick={() => onBulkDeleteRequest(selectedRows.map((r) => r.original))}
+              sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
+            >
+              Delete
+            </Button>
+          )}
         </Box>
       );
     },
@@ -1427,10 +1424,11 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>View profile</ListItemText>
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
+        {(onMarkDeadLead || onMarkIrrelevant) && <Divider sx={{ my: 0.5 }} />}
+        {onMarkDeadLead && (
         <MenuItem
           onClick={() => {
-            if (actionMenuUser && onMarkDeadLead) onMarkDeadLead(actionMenuUser);
+            if (actionMenuUser) onMarkDeadLead(actionMenuUser);
             setActionMenuAnchor(null);
             setActionMenuUser(null);
           }}
@@ -1442,9 +1440,11 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>Mark as dead lead</ListItemText>
         </MenuItem>
+        )}
+        {onMarkIrrelevant && (
         <MenuItem
           onClick={() => {
-            if (actionMenuUser && onMarkIrrelevant) onMarkIrrelevant(actionMenuUser);
+            if (actionMenuUser) onMarkIrrelevant(actionMenuUser);
             setActionMenuAnchor(null);
             setActionMenuUser(null);
           }}
@@ -1456,10 +1456,12 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>Mark as irrelevant</ListItemText>
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
+        )}
+        {(onVerifyStatus || onArchiveRequest || onRestore) && <Divider sx={{ my: 0.5 }} />}
+        {onVerifyStatus && (
         <MenuItem
           onClick={() => {
-            if (actionMenuUser && onVerifyStatus) onVerifyStatus(actionMenuUser);
+            if (actionMenuUser) onVerifyStatus(actionMenuUser);
             setActionMenuAnchor(null);
             setActionMenuUser(null);
           }}
@@ -1470,10 +1472,12 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>Verify exam status</ListItemText>
         </MenuItem>
-        {actionMenuUser?.lifecycle_status === 'archived' ? (
+        )}
+        {actionMenuUser?.lifecycle_status === 'archived'
+          ? onRestore && (
           <MenuItem
             onClick={() => {
-              if (actionMenuUser && onRestore) onRestore(actionMenuUser);
+              if (actionMenuUser) onRestore(actionMenuUser);
               setActionMenuAnchor(null);
               setActionMenuUser(null);
             }}
@@ -1484,10 +1488,11 @@ export default function UsersTable(props: UsersTableProps) {
             </ListItemIcon>
             <ListItemText sx={{ color: 'success.main' }}>Restore to active</ListItemText>
           </MenuItem>
-        ) : (
+          )
+          : onArchiveRequest && (
           <MenuItem
             onClick={() => {
-              if (actionMenuUser && onArchiveRequest) onArchiveRequest([actionMenuUser]);
+              if (actionMenuUser) onArchiveRequest([actionMenuUser]);
               setActionMenuAnchor(null);
               setActionMenuUser(null);
             }}
@@ -1498,11 +1503,12 @@ export default function UsersTable(props: UsersTableProps) {
             </ListItemIcon>
             <ListItemText>Archive (de-prioritize)</ListItemText>
           </MenuItem>
-        )}
-        <Divider sx={{ my: 0.5 }} />
+          )}
+        {onDisableToggle && <Divider sx={{ my: 0.5 }} />}
+        {onDisableToggle && (
         <MenuItem
           onClick={() => {
-            if (actionMenuUser && onDisableToggle) onDisableToggle(actionMenuUser);
+            if (actionMenuUser) onDisableToggle(actionMenuUser);
             setActionMenuAnchor(null);
             setActionMenuUser(null);
           }}
@@ -1518,12 +1524,12 @@ export default function UsersTable(props: UsersTableProps) {
             {actionMenuUser?.is_disabled ? 'Enable account' : 'Disable account'}
           </ListItemText>
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
+        )}
+        {onBulkDeleteRequest && <Divider sx={{ my: 0.5 }} />}
+        {onBulkDeleteRequest && (
         <MenuItem
           onClick={() => {
-            if (actionMenuUser && onBulkDeleteRequest) {
-              onBulkDeleteRequest([actionMenuUser]);
-            }
+            if (actionMenuUser) onBulkDeleteRequest([actionMenuUser]);
             setActionMenuAnchor(null);
             setActionMenuUser(null);
           }}
@@ -1534,6 +1540,7 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>Delete account</ListItemText>
         </MenuItem>
+        )}
       </Menu>
     </>
   );

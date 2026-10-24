@@ -11,7 +11,8 @@
  * the writes.
  */
 
-import type { DemoRequest } from '@neram/database';
+import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
+import { LATER_FLAG } from '@neram/database/demo-follow-up';
 import { formatDemoDate, istDateKey, istDateTime } from '@neram/database/demo-schedule';
 
 export type LaterPreset = '1m' | '3m' | 'exam' | 'custom';
@@ -89,6 +90,32 @@ export function isParkedLater(r: LaterFields, now: Date): boolean {
     !!r.next_contact_at &&
     new Date(r.next_contact_at).getTime() > now.getTime()
   );
+}
+
+const OPEN_FOLLOW_UP = new Set(['pending', 'scheduled', 'attempted']);
+
+/**
+ * Parked after the demo and not due yet: the open follow-up carries the
+ * "later" flag and its next call is still ahead. It sits on the Later tab and
+ * comes back to After demo on that date.
+ */
+export function isParkedAfterDemo(
+  f: (Pick<DemoFollowUpRow, 'status'> & Partial<Pick<DemoFollowUpRow, 'flags' | 'scheduled_callback_at'>>) | null | undefined,
+  now: Date,
+): boolean {
+  return (
+    !!f &&
+    OPEN_FOLLOW_UP.has(f.status) &&
+    (f.flags || []).includes(LATER_FLAG) &&
+    !!f.scheduled_callback_at &&
+    new Date(f.scheduled_callback_at).getTime() > now.getTime()
+  );
+}
+
+/** The reason staff typed when parking a follow-up ("Later: <reason>"). */
+export function parkedReason(f: Pick<DemoFollowUpRow, 'call_notes'> | null | undefined): string | null {
+  const m = /^Later:\s*(.+)$/s.exec(f?.call_notes || '');
+  return m ? m[1].trim() : null;
 }
 
 function firstName(name: string | null | undefined): string {
